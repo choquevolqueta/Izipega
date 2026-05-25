@@ -1,11 +1,11 @@
+
 # Izipega
 
 Extensión de Chrome + servidor local que rellena cualquier formulario web usando tu perfil y un par de modelos de IA gratuitos (Gemini como primario, Groq como respaldo).
 
 > ⚠️ **Versión demo / beta en evaluación.** Funciona, pero esperá bugs. Reportá lo que encuentres como issue.
 
-<!-- Para agregar un screenshot: drop una imagen en docs/demo.png y reemplaza la línea de abajo -->
-<!-- ![Demo](docs/demo.png) -->
+<img width="1201" height="532" alt="iziejemplo" src="https://github.com/user-attachments/assets/1b986bc3-ee4b-4ef5-a458-34b2cb8b9cc8" />
 
 ## Qué necesitás antes de empezar
 
