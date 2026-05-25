@@ -118,6 +118,7 @@ izipega/
 ## Contribuir
 
 Issues y PRs bienvenidos. Esto es código de fin de semana, hay deuda técnica.
+Si realmente te sirve y te sobran algunos USDT o pesos, me puedes colaborar al DM 😁
 
 ## Licencia
 
