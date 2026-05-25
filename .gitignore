@@ -1,0 +1,38 @@
+# API keys y secretos
+.env
+.env.local
+.env.*.local
+
+# Datos personales del usuario
+perfil.json
+perfil_propuesto.json
+perfil_backups/
+contexto_actual.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Logs
+logs/
+*.log
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Otros
+*.bak
+*.tmp

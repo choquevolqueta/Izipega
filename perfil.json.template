@@ -1,0 +1,27 @@
+{
+    "nombre": "",
+    "edad": null,
+    "ciudad": "",
+    "comuna": "",
+    "telefono": "",
+    "email": "",
+    "nacionalidad": "",
+    "perfil_profesional": "",
+    "experiencia": [],
+    "estudios": [],
+    "habilidades": [],
+    "herramientas": [],
+    "idiomas": [],
+    "motivacion": "",
+    "disponibilidad": "",
+    "expectativa_sueldo": "",
+    "modalidad_preferida": "",
+    "fortalezas": [],
+    "redes": {
+        "linkedin": "",
+        "portafolio_web": "",
+        "behance": ""
+    },
+    "respuestas_extra": {},
+    "cv_archivo": ""
+}

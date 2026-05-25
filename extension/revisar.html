@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Revisar propuesta de perfil — Izipega</title>
+    <link rel="stylesheet" href="revisar.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-left">
+        <h1>Revisar propuesta de perfil</h1>
+        <span id="status-pill" class="pill pill-info">cargando...</span>
+      </div>
+      <div class="topbar-right">
+        <button id="btn-cancelar" class="btn btn-secondary">Cancelar</button>
+        <button id="btn-aceptar" class="btn btn-primary">Aceptar y guardar</button>
+      </div>
+    </header>
+
+    <nav class="modo">
+      <button id="modo-visual" class="modo-btn activo">Vista comparada</button>
+      <button id="modo-json" class="modo-btn">Editar JSON crudo</button>
+      <div class="modo-hint" id="modo-hint">
+        Los valores propuestos sobreescribiran al perfil actual al aceptar.
+      </div>
+    </nav>
+
+    <main id="vista-visual" class="vista-visual">
+      <div id="resumen" class="resumen">Cargando propuesta...</div>
+      <div id="secciones"></div>
+    </main>
+
+    <main id="vista-json" class="vista-json hidden">
+      <div class="warning-json">
+        <strong>⚠ Modo avanzado — puedes romper el perfil si editas mal el JSON.</strong>
+        <ul>
+          <li>Una coma o llave fuera de lugar deja el archivo invalido y el perfil no se podra cargar.</li>
+          <li>Renombrar una clave (p.ej. <code>cargo</code> -> <code>puesto</code>) hace que el rellenado de formularios falle silenciosamente.</li>
+          <li>Si no eres programador, vuelve a <b>Vista comparada</b> y deja que el sistema haga el merge automatico.</li>
+        </ul>
+        <p class="warning-json-foot">
+          Al guardar, este JSON reemplaza por completo al perfil. Hay backup en <code>perfil_backups/</code>.
+        </p>
+      </div>
+      <textarea id="json-editor" spellcheck="false"></textarea>
+      <div id="json-error" class="json-error hidden"></div>
+    </main>
+
+    <footer class="footer">
+      <span class="muted">Antes de aplicar se guarda un backup en perfil_backups/.</span>
+    </footer>
+
+    <script src="revisar.js"></script>
+  </body>
+</html>

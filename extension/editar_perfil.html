@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Editar perfil — Izipega</title>
+    <link rel="stylesheet" href="editar_perfil.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-left">
+        <h1>Editar perfil</h1>
+        <span id="status-pill" class="pill pill-info">cargando...</span>
+      </div>
+      <div class="topbar-right">
+        <button id="btn-cancelar" class="btn btn-secondary">Cancelar</button>
+        <button id="btn-guardar" class="btn btn-primary">Guardar</button>
+      </div>
+    </header>
+
+    <main class="contenido">
+      <p class="hint-global">
+        Edita los campos y dale a <b>Guardar</b>. Se hace un backup en
+        <code>perfil_backups/</code> antes de aplicar los cambios.
+      </p>
+
+      <!-- DATOS PERSONALES -->
+      <section class="bloque">
+        <h2>Datos personales</h2>
+        <div class="grid-2">
+          <label>Nombre completo
+            <input id="f-nombre" type="text" />
+          </label>
+          <label>Edad
+            <input id="f-edad" type="number" min="0" />
+          </label>
+          <label>Ciudad
+            <input id="f-ciudad" type="text" />
+          </label>
+          <label>Comuna
+            <input id="f-comuna" type="text" />
+          </label>
+          <label>Telefono
+            <input id="f-telefono" type="text" placeholder="+56 9 ..." />
+          </label>
+          <label>Email
+            <input id="f-email" type="email" />
+          </label>
+          <label class="ancho-2">Nacionalidad y situacion legal
+            <input id="f-nacionalidad" type="text" placeholder="Boliviana con residencia legal vigente en Chile" />
+          </label>
+        </div>
+      </section>
+
+      <!-- REDES -->
+      <section class="bloque">
+        <h2>Redes y portafolio</h2>
+        <label>LinkedIn
+          <input id="f-linkedin" type="url" placeholder="https://linkedin.com/in/..." />
+        </label>
+        <label>Portafolio web
+          <input id="f-portfolio" type="url" placeholder="https://tunombre.com" />
+        </label>
+        <label>Behance / Dribbble
+          <input id="f-behance" type="url" placeholder="https://behance.net/..." />
+        </label>
+      </section>
+
+      <!-- PERFIL PROFESIONAL -->
+      <section class="bloque">
+        <h2>Perfil profesional</h2>
+        <label>Resumen profesional
+          <textarea id="f-perfil-prof" rows="5" placeholder="2-4 oraciones sobre quien eres profesionalmente"></textarea>
+        </label>
+      </section>
+
+      <!-- POSTULACION -->
+      <section class="bloque">
+        <h2>Postulacion</h2>
+        <label>Motivacion (para formularios)
+          <textarea id="f-motivacion" rows="4"></textarea>
+        </label>
+        <div class="grid-3">
+          <label>Disponibilidad
+            <input id="f-disponibilidad" type="text" placeholder="inmediata" />
+          </label>
+          <label>Expectativa de sueldo
+            <input id="f-sueldo" type="text" placeholder="a convenir" />
+          </label>
+          <label>Modalidad preferida
+            <input id="f-modalidad" type="text" placeholder="presencial, hibrido o remoto" />
+          </label>
+        </div>
+      </section>
+
+      <!-- LISTAS SIMPLES -->
+      <section class="bloque">
+        <h2>Listas (una linea por item)</h2>
+        <label>Habilidades
+          <textarea id="f-habilidades" rows="5" placeholder="Una por linea"></textarea>
+        </label>
+        <label>Herramientas
+          <textarea id="f-herramientas" rows="5" placeholder="Una por linea"></textarea>
+        </label>
+        <label>Fortalezas
+          <textarea id="f-fortalezas" rows="4" placeholder="Una por linea"></textarea>
+        </label>
+        <label>Idiomas (formato <code>Idioma: Nivel</code>, uno por linea)
+          <textarea id="f-idiomas" rows="3" placeholder="Espanol: Nativo&#10;Ingles: B2"></textarea>
+        </label>
+      </section>
+
+      <!-- RESPUESTAS EXTRA (Q&A humano) -->
+      <section class="bloque">
+        <h2>Respuestas a preguntas frecuentes</h2>
+        <p class="hint">
+          Una pregunta por bloque. Escribe la pregunta SIN espacios al
+          inicio, y la respuesta indentada (2 espacios). Separa cada
+          bloque con una linea vacia.
+        </p>
+        <textarea id="f-respuestas-extra" rows="14" placeholder="Por que este cargo?&#10;  Tengo 5 anos de experiencia en marketing y...&#10;&#10;Licencia de conducir?&#10;  no&#10;&#10;Cual es tu mayor fortaleza?&#10;  Mi capacidad de combinar creatividad con IA aplicada."></textarea>
+      </section>
+
+      <!-- EXPERIENCIA Y ESTUDIOS: aviso (no editable a mano) -->
+      <section class="bloque bloque-aviso">
+        <h2>Experiencia y estudios</h2>
+        <p class="hint">
+          Estos datos se actualizan subiendo tu CV (PDF) desde el panel
+          principal. No se editan manualmente aqui para evitar romper la
+          estructura. Cierra esta pestana y arrastra tu CV al panel
+          lateral para actualizarlos.
+        </p>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span class="muted">Se hace backup antes de aplicar.</span>
+      <span id="footer-msg" class="muted"></span>
+    </footer>
+
+    <script src="editar_perfil.js"></script>
+  </body>
+</html>

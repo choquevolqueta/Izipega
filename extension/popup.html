@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Izipega</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div id="barra-progreso" class="barra-progreso"></div>
+    <header>
+      <h1>Izipega</h1>
+      <div class="header-derecha">
+        <button id="btn-config-keys" class="icono" title="Configurar API keys">⚙</button>
+        <button id="btn-reload-ext" class="icono" title="Recargar extension">⟳</button>
+        <div id="status" class="status off">
+          <span class="dot"></span>
+          <span class="txt">conectando...</span>
+        </div>
+      </div>
+    </header>
+
+    <section id="config-keys" class="config-keys hidden">
+      <div class="config-keys-cabecera">
+        <strong>Configurar API keys</strong>
+        <button id="btn-cerrar-config" class="icono icono-cerrar" title="Cerrar">✕</button>
+      </div>
+      <p class="config-keys-ayuda">
+        Necesitas al menos una key. Ambas son gratis y se guardan solo en tu PC.
+      </p>
+      <label class="config-keys-label">
+        <span>Gemini (primaria)</span>
+        <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">obtener</a>
+      </label>
+      <input id="input-gemini-key" type="password" placeholder="AIzaSy..." autocomplete="off" />
+      <label class="config-keys-label">
+        <span>Groq (respaldo)</span>
+        <a href="https://console.groq.com/keys" target="_blank" rel="noopener">obtener</a>
+      </label>
+      <input id="input-groq-key" type="password" placeholder="gsk_..." autocomplete="off" />
+      <div class="config-keys-estado" id="config-keys-estado"></div>
+      <button id="btn-guardar-keys" class="primary">Guardar y conectar</button>
+    </section>
+
+    <section class="contexto">
+      <div class="contexto-line">
+        <strong>Contexto:</strong>
+        <span id="ctx-cargo">—</span>
+      </div>
+      <div class="contexto-line muted">
+        <span id="ctx-empresa">—</span>
+      </div>
+      <div id="score-box" class="score-box hidden">
+        <div class="score-cabecera">
+          <span class="score-label">Idoneidad</span>
+          <span id="score-num" class="score-num">—</span>
+        </div>
+        <div class="score-barra">
+          <div id="score-fill" class="score-fill"></div>
+        </div>
+        <details id="score-detalle" class="score-detalle">
+          <summary>Detalle</summary>
+          <div id="score-justificacion" class="score-justif"></div>
+          <div class="score-keywords">
+            <div class="kw-grupo">
+              <div class="kw-titulo">Coincidentes</div>
+              <div id="kw-coincidentes" class="kw-lista"></div>
+            </div>
+            <div class="kw-grupo">
+              <div class="kw-titulo">Faltantes</div>
+              <div id="kw-faltantes" class="kw-lista"></div>
+            </div>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <section class="botones">
+      <button id="btn-analizar" class="primary">Analizar contexto</button>
+      <button id="btn-rellenar" class="primary">Rellenar formulario</button>
+      <button id="btn-forzar" class="secondary">Re-llenar (forzar)</button>
+    </section>
+
+    <section id="respuestas-curadas" class="respuestas-curadas hidden">
+      <div class="respuestas-cabecera">
+        <strong>Respuestas generadas (copia manual)</strong>
+        <button id="btn-cerrar-curadas" class="icono icono-cerrar" title="Cerrar">✕</button>
+      </div>
+      <p class="respuestas-ayuda">
+        El rellenado automatico fallo, pero las respuestas si se generaron. Copialas a mano.
+      </p>
+      <div id="respuestas-lista" class="respuestas-lista"></div>
+    </section>
+
+    <section class="perfil-import">
+      <div class="perfil-import-titulo">
+        <span>Mi perfil</span>
+        <button id="btn-editar-perfil" class="link" title="Editar perfil manualmente">Editar manualmente</button>
+      </div>
+      <div id="drop-zone" class="drop-zone">
+        <div class="drop-zone-icono">⇩</div>
+        <div class="drop-zone-txt">Arrastra un PDF aqui</div>
+        <div class="drop-zone-sub">o</div>
+        <button id="btn-elegir-pdf" class="secondary">Elegir archivo</button>
+        <input id="input-pdf" type="file" accept="application/pdf" hidden />
+      </div>
+      <div id="propuesta-aviso" class="propuesta-aviso hidden">
+        Hay una propuesta de perfil pendiente.
+        <button id="btn-abrir-revision" class="link">Revisar</button>
+      </div>
+    </section>
+
+    <section class="ayuda">
+      <details>
+        <summary>Como funciona</summary>
+        <ol>
+          <li><b>Analizar contexto</b> (opcional): si estas en una oferta de trabajo o pagina con descripcion, esto pre-analiza el texto para que las respuestas usen tu mejor experiencia. Tip: tambien funciona con texto seleccionado.</li>
+          <li><b>Rellenar formulario</b>: detecta campos vacios y los completa con tu perfil + IA.</li>
+          <li><b>Re-llenar (forzar)</b>: limpia y vuelve a llenar saltandose respuestas directas.</li>
+        </ol>
+      </details>
+    </section>
+
+    <section class="log">
+      <div class="log-header">Log</div>
+      <div id="log-body"></div>
+    </section>
+
+    <footer>
+      <span class="muted">Servidor: localhost:8765</span>
+    </footer>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
