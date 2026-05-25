@@ -1,7 +1,7 @@
 
 # Izipega
 
-Extensión de Chrome + servidor local que rellena cualquier formulario web usando tu perfil y un par de modelos de IA gratuitos (Gemini como primario, Groq como respaldo).
+Extensión de Chrome + servidor local que te ayuda a buscar pega(trabajo) usa la IA para saber si te conviene postular a una oferta, y  rellena cualquier formulario web usando tu perfil y un par de modelos de IA gratuitos (Gemini como primario, Groq como respaldo) para mejorar tus posibilidades de pasar los filtros ATS.
 
 > ⚠️ **Versión demo / beta en evaluación.** Funciona, pero esperá bugs. Reportá lo que encuentres como issue.
 
@@ -51,8 +51,8 @@ Si ya tenés Python instalado, saltá esto.
 
 ## Cómo usarla
 
-- **Analizar contexto** (opcional pero recomendado): en una página de oferta laboral, analiza el texto y calcula un score de idoneidad 0-100 + extrae las keywords ATS (habilidades duras/blandas, experiencia requerida).
-- **Rellenar formulario**: detecta los campos vacíos del formulario y los completa con tu perfil + IA. Usa visión por campo (más lento pero más preciso, no inventa datos que no estén en tu perfil).
+- **Analizar contexto** (obligatorio y 🚨EL MÁS IMPORTANTE🚨): en una página de oferta laboral, analiza el texto y calcula un score de idoneidad 0-100 + extrae las keywords ATS (habilidades duras/blandas, experiencia requerida).
+- **Rellenar formulario**: detecta los campos vacíos del formulario y los completa con tu perfil + IA + el contexto reducido a palabras clave. Usa visión por campo (más lento pero más preciso, no inventa datos que no estén en tu perfil).
 - **Re-llenar (forzar)**: limpia y vuelve a llenar, ignorando los atajos directos del perfil.
 
 ### Atajos de teclado
