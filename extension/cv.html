@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mi CV — Izipega</title>
+  <link rel="stylesheet" href="cv.css" />
+</head>
+<body>
+  <!-- Barra de control: NO se imprime -->
+  <div class="controls no-print">
+    <div class="controls-left">
+      <span id="status-pill" class="pill pill-info">Cargando…</span>
+      <label class="toggle">
+        <input type="checkbox" id="chk-optimizar" checked />
+        Optimizar con IA (usa keywords faltantes)
+      </label>
+      <button id="btn-toggle-exp" class="secondary">➕ Agregar experiencia</button>
+    </div>
+    <div class="controls-right">
+      <button id="btn-regenerar" class="secondary">Regenerar</button>
+      <button id="btn-guardar-perfil" class="secondary" title="Reemplaza tu perfil guardado con este CV (con respaldo automático)">💾 Guardar en mi perfil</button>
+      <button id="btn-pdf" class="primary">Descargar PDF</button>
+    </div>
+  </div>
+
+  <!-- Mini-formulario para agregar experiencia nueva. NO se imprime. -->
+  <form id="form-exp" class="form-exp no-print hidden">
+    <h3>Agregar experiencia</h3>
+    <p class="sub">Se suma a este CV. Para dejarla permanente, pulsa luego “Guardar en mi perfil”.</p>
+    <div class="form-grid">
+      <label>Cargo <span class="req">*</span><input id="exp-cargo" type="text" placeholder="Ej: Encargado de Marketing" /></label>
+      <label>Empresa<input id="exp-empresa" type="text" placeholder="Ej: Carnicería Adelita" /></label>
+      <label>Ubicación<input id="exp-ubicacion" type="text" placeholder="Ciudad, País" /></label>
+      <label>Periodo<input id="exp-periodo" type="text" placeholder="Ej: Marzo 2024 - Actualidad" /></label>
+    </div>
+    <label class="full">Descripción<textarea id="exp-descripcion" rows="3" placeholder="Tareas y logros principales…"></textarea></label>
+    <div class="form-acciones">
+      <button type="button" id="btn-exp-cancelar" class="secondary">Cancelar</button>
+      <button type="button" id="btn-exp-add" class="primary">Añadir al CV</button>
+    </div>
+  </form>
+
+  <p id="keywords-aviso" class="keywords-aviso no-print hidden"></p>
+
+  <!-- Transparencia: qué decidió la IA con cada keyword. NO se imprime. -->
+  <aside id="panel-brechas" class="panel-brechas no-print hidden"></aside>
+
+  <!-- Hoja del CV -->
+  <main id="cv" class="cv-hoja">
+    <p class="cargando">Generando tu CV…</p>
+  </main>
+
+  <script src="cv.js"></script>
+</body>
+</html>

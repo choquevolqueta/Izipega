@@ -1,0 +1,368 @@
+[
+  {
+    "fecha": "2026-06-02T19:35:03",
+    "cargo_objetivo": "Líder de Modulo / Mall Easton Quilicura",
+    "empresa": "La Casa de las Carcasas",
+    "score_idoneidad": 65,
+    "keywords_faltantes": [
+      "Liderazgo de equipos",
+      "Análisis de KPI's",
+      "Gestión de stock",
+      "Visual merchandising",
+      "Retail",
+      "Formación de equipos",
+      "Organización"
+    ],
+    "keywords_coincidentes": [
+      "Atención al cliente",
+      "Ventas directas",
+      "Negociación",
+      "Fidelización",
+      "Resolución de conflictos",
+      "Trabajo bajo presión",
+      "Orientación al detalle",
+      "Gestión de reclamos"
+    ],
+    "keywords_ats": [
+      "Liderazgo de equipos",
+      "Gestión de equipos",
+      "Ventas",
+      "Atención al cliente",
+      "Experiencia al cliente",
+      "Análisis de KPI's",
+      "Gestión de stock",
+      "Visual merchandising",
+      "Retail",
+      "Enfoque en objetivos",
+      "Resultados",
+      "Formación de equipos",
+      "Organización"
+    ]
+  },
+  {
+    "fecha": "2026-06-02T19:36:24",
+    "cargo_objetivo": "Vendedor Part Time",
+    "empresa": "Skechers Chile",
+    "score_idoneidad": 85,
+    "keywords_faltantes": [
+      "Manejo POS",
+      "Conocimiento calzado",
+      "Matemáticas para ventas",
+      "Visual merchandising",
+      "Confidencialidad",
+      "Cumplimiento normativo",
+      "Recepción de mercadería"
+    ],
+    "keywords_coincidentes": [
+      "Atención al cliente",
+      "Ventas retail",
+      "Técnicas de venta",
+      "Cierre de ventas",
+      "Servicio personalizado",
+      "Comunicación profesional",
+      "Gestión de reclamos",
+      "Negociación",
+      "Gestión de inventario"
+    ],
+    "keywords_ats": [
+      "Ventas retail",
+      "Atención al cliente",
+      "Técnicas de venta",
+      "Manejo POS",
+      "Gestión de inventario",
+      "Visual merchandising",
+      "Conocimiento calzado",
+      "Matemáticas para ventas",
+      "Servicio personalizado",
+      "Comunicación profesional",
+      "Confidencialidad",
+      "Cumplimiento normativo",
+      "Recepción de mercadería",
+      "Cierre de ventas"
+    ]
+  },
+  {
+    "fecha": "2026-06-02T19:38:14",
+    "cargo_objetivo": "Auxiliar de Bodega Diurno",
+    "empresa": "Skechers Chile",
+    "score_idoneidad": 88,
+    "keywords_faltantes": [
+      "Transportador portátil"
+    ],
+    "keywords_coincidentes": [
+      "Carga y descarga de productos",
+      "Operaciones de bodega",
+      "Centro de distribución",
+      "Recepción de productos",
+      "Manipulación de productos",
+      "Despacho de productos",
+      "Adherencia a procedimientos"
+    ],
+    "keywords_ats": [
+      "Auxiliar de Bodega",
+      "Carga y descarga de productos",
+      "Transportador portátil",
+      "Operaciones de bodega",
+      "Centro de distribución",
+      "Recepción de productos",
+      "Manipulación de productos",
+      "Despacho de productos",
+      "Procedimientos de bodega",
+      "Junior"
+    ]
+  },
+  {
+    "fecha": "2026-06-02T19:39:18",
+    "cargo_objetivo": "Vendedor/a Full Time Crocs Costanera Center",
+    "empresa": "Forus",
+    "score_idoneidad": 75,
+    "keywords_faltantes": [
+      "Visa definitiva",
+      "Pasión por el retail"
+    ],
+    "keywords_coincidentes": [
+      "Ventas",
+      "Retail",
+      "Atención al cliente",
+      "Experiencia retail",
+      "Enseñanza media completa",
+      "Mayoría de edad",
+      "Orientación a metas",
+      "Documentación vigente"
+    ],
+    "keywords_ats": [
+      "Ventas",
+      "Retail",
+      "Atención al cliente",
+      "Experiencia retail",
+      "Enseñanza media completa",
+      "Visa definitiva",
+      "Mayoría de edad",
+      "Orientación a metas",
+      "Pasión por el retail",
+      "Documentación vigente"
+    ]
+  },
+  {
+    "fecha": "2026-06-02T19:41:02",
+    "cargo_objetivo": "Ejecutivo(a) de Televentas",
+    "empresa": "Vista Multinacional de Contac Center",
+    "score_idoneidad": 75,
+    "keywords_faltantes": [
+      "Productos bancarios o financieros",
+      "Créditos de Consumo",
+      "Tarjetas de Crédito y Upgrade",
+      "Avances y Refinanciamientos",
+      "Comercialización de productos financieros",
+      "Call Center",
+      "Manejo de PC nivel usuario"
+    ],
+    "keywords_coincidentes": [
+      "Enseñanza Media Completa",
+      "Ventas directas",
+      "Negociación",
+      "Comunicación efectiva",
+      "Atención al cliente",
+      "Perfil comercial",
+      "Fidelización",
+      "Gestión de reclamos",
+      "Orientación al detalle"
+    ],
+    "keywords_ats": [
+      "Ejecutivo(a) de Televentas",
+      "Productos financieros",
+      "Créditos de Consumo",
+      "Tarjetas de Crédito",
+      "Ventas",
+      "Call Center",
+      "Manejo PC usuario",
+      "Perfil comercial",
+      "Orientación a metas",
+      "Comunicación",
+      "Negociación",
+      "Experiencia ventas financieras",
+      "Rubro Retail",
+      "Bancarios",
+      "Refinanciamientos"
+    ]
+  },
+  {
+    "fecha": "2026-06-02T19:45:06",
+    "cargo_objetivo": "Sales Advisor 20 hrs – Hair Care Store",
+    "empresa": "Tua Retail",
+    "score_idoneidad": 65,
+    "keywords_faltantes": [
+      "Hair Care Store",
+      "Mens Grooming Store",
+      "Cuidado capilar masculino",
+      "Tendencias de estilo",
+      "Pasión por asesorar",
+      "Asesoramiento de imagen"
+    ],
+    "keywords_coincidentes": [
+      "Retail",
+      "Atención al cliente",
+      "Servicio al cliente",
+      "Actitud comercial",
+      "Ventas directas",
+      "Negociación",
+      "Fidelización",
+      "Resolución de conflictos"
+    ],
+    "keywords_ats": [
+      "Sales Advisor",
+      "Hair Care Store",
+      "Retail",
+      "Hair Care Advisor",
+      "Mens Grooming Store",
+      "Cuidado capilar masculino",
+      "Tendencias de estilo",
+      "Actitud comercial",
+      "Servicio al cliente",
+      "Asesoramiento",
+      "Potenciar imagen",
+      "Cuidar cabello",
+      "Fortalecer confianza",
+      "Pasión por asesorar"
+    ]
+  },
+  {
+    "fecha": "2026-06-02T19:46:26",
+    "cargo_objetivo": "Visual Merchandiser Field (Terreno)",
+    "empresa": "",
+    "score_idoneidad": 45,
+    "keywords_faltantes": [
+      "Visual Merchandising",
+      "Exhibición de productos",
+      "Análisis de desempeño comercial",
+      "Análisis de indicadores comerciales",
+      "Rotación de productos",
+      "Cumplimiento de campañas",
+      "Implementación de campañas de visual merchandising",
+      "Planificación de visitas"
+    ],
+    "keywords_coincidentes": [
+      "Ventas",
+      "Retail",
+      "Orientación al detalle",
+      "Mirada comercial",
+      "Capacidad de ejecutar"
+    ],
+    "keywords_ats": [
+      "Visual Merchandiser Field",
+      "Terreno",
+      "Retail",
+      "Exhibición de productos",
+      "Estrategias de visual merchandising",
+      "Desempeño comercial",
+      "Análisis de ventas",
+      "Rotación de productos",
+      "Experiencia de marca en tienda",
+      "Implementación de campañas",
+      "Planificación de visitas",
+      "Indicadores comerciales",
+      "Mirada comercial",
+      "Orientación al detalle",
+      "Capacidad de ejecutar"
+    ]
+  },
+  {
+    "fecha": "2026-06-02T19:48:05",
+    "cargo_objetivo": "Asistente de Retail / Apoyo Multifuncional",
+    "empresa": "",
+    "score_idoneidad": 88,
+    "keywords_faltantes": [],
+    "keywords_coincidentes": [
+      "Retail",
+      "Atención al cliente",
+      "Ventas",
+      "Enseñanza Media Completa",
+      "Orden de productos",
+      "Reposición",
+      "Bodega",
+      "Punto de venta"
+    ],
+    "keywords_ats": [
+      "Retail",
+      "Atención de Clientes",
+      "Ventas",
+      "Enseñanza media completa",
+      "Orden de productos",
+      "Reposición",
+      "Punto de venta",
+      "Bodega",
+      "Experiencia comprobable"
+    ]
+  },
+  {
+    "fecha": "2026-06-02T19:50:39",
+    "cargo_objetivo": "Encargado de Bodega Tienda Retail Santiago Centro",
+    "empresa": "Importante empresa de retail",
+    "score_idoneidad": 45,
+    "keywords_faltantes": [
+      "Experiencia 2 años en cargos similares con personal operativo a cargo",
+      "Control de stock",
+      "Aplicación de inventarios selectivos y programados",
+      "Manejo de Excel Intermedio",
+      "Manejo de SAP",
+      "Manejo de AS400",
+      "Manejo de WMS"
+    ],
+    "keywords_coincidentes": [
+      "Gestión de operaciones",
+      "Trabajo bajo presión",
+      "Orientación al detalle",
+      "Trabajo en equipo"
+    ],
+    "keywords_ats": [
+      "Encargado de Bodega",
+      "supervisar",
+      "recepción de camiones",
+      "almacenaje",
+      "distribución de mercadería",
+      "control de stock",
+      "inventarios",
+      "personal operativo a cargo",
+      "experiencia 2 años",
+      "Excel Intermedio",
+      "SAP",
+      "AS400",
+      "WMS"
+    ]
+  },
+  {
+    "fecha": "2026-06-02T19:56:56",
+    "cargo_objetivo": "Operador de Implementación de Exhibiciones",
+    "empresa": "Consultora Teamwork",
+    "score_idoneidad": 60,
+    "keywords_faltantes": [
+      "Implementación de exhibiciones",
+      "Planogramas",
+      "Reparación de mobiliario",
+      "Levantamiento de información",
+      "Estandarización",
+      "Equipamiento"
+    ],
+    "keywords_coincidentes": [
+      "Retail",
+      "Operaciones",
+      "Gestión de operaciones",
+      "Adaptación rápida"
+    ],
+    "keywords_ats": [
+      "Implementación de Exhibiciones",
+      "Retail",
+      "Planogramas",
+      "Organización de productos",
+      "Equipamiento",
+      "Mobiliario",
+      "Levantamiento de información",
+      "Puntos de venta",
+      "Estandarización",
+      "Proactivo",
+      "Flexible",
+      "Adaptabilidad",
+      "Operaciones de tienda"
+    ]
+  }
+]

@@ -539,6 +539,45 @@ button.secondary:hover:not(:disabled) {
   letter-spacing: 0;
 }
 
+/* Botón destacado "Crear CV optimizado" */
+.btn-cv {
+  width: 100%;
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 14px;
+  border: none;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+  background: linear-gradient(135deg, #6d4aff, #9b5cff);
+  box-shadow: 0 4px 14px rgba(109, 74, 255, 0.35);
+  transition: transform 0.12s, box-shadow 0.12s, filter 0.12s;
+}
+.btn-cv:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(109, 74, 255, 0.45);
+}
+.btn-cv:active:not(:disabled) { transform: translateY(0); }
+.btn-cv:disabled {
+  background: #3a3a3a;
+  color: #888;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+.btn-cv-icono { font-size: 15px; line-height: 1; }
+.cv-hint {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #888;
+  text-align: center;
+}
+.cv-hint.lista { color: #6fcf97; }
+
 .drop-zone {
   border: 2px dashed #444;
   border-radius: 8px;

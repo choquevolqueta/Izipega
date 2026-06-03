@@ -24,6 +24,7 @@ import io
 import json
 import logging
 import os
+import re
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -137,6 +138,65 @@ IA = get_ia()
 # ──────────────────────────────────────────────────────────────────
 CONTEXTO_PATH = Path(__file__).parent / "contexto_actual.json"
 _CONTEXTO: dict | None = None
+
+# ──────────────────────────────────────────────────────────────────
+# HISTORIAL DE KEYWORDS (ultimas N ofertas analizadas)
+# Sirve para reescribir el CV: acumula las keywords que faltan en el
+# perfil a lo largo de varias ofertas y muestra cuales se repiten mas.
+# ──────────────────────────────────────────────────────────────────
+HISTORIAL_PATH = Path(__file__).parent / "historial_keywords.json"
+HISTORIAL_MAX = 10
+
+
+def cargar_historial() -> list[dict]:
+    if HISTORIAL_PATH.exists():
+        try:
+            data = json.loads(HISTORIAL_PATH.read_text(encoding="utf-8"))
+            return data if isinstance(data, list) else []
+        except Exception as e:
+            log.warning(f"historial: no pude leer {HISTORIAL_PATH.name}: {e}")
+    return []
+
+
+def guardar_en_historial(ctx: dict) -> None:
+    """Anade el analisis actual al historial (ring buffer de HISTORIAL_MAX)."""
+    if not ctx or not ctx.get("cargo_objetivo"):
+        return
+    entrada = {
+        "fecha": datetime.now().isoformat(timespec="seconds"),
+        "cargo_objetivo": ctx.get("cargo_objetivo", ""),
+        "empresa": ctx.get("empresa", ""),
+        "score_idoneidad": ctx.get("score_idoneidad"),
+        "keywords_faltantes": ctx.get("keywords_faltantes", []),
+        "keywords_coincidentes": ctx.get("keywords_coincidentes", []),
+        "keywords_ats": ctx.get("keywords_ats", []),
+    }
+    historial = cargar_historial()
+    historial.append(entrada)
+    historial = historial[-HISTORIAL_MAX:]
+    try:
+        HISTORIAL_PATH.write_text(
+            json.dumps(historial, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        log.info(f"historial: guardada entrada ({len(historial)}/{HISTORIAL_MAX}).")
+    except Exception as e:
+        log.warning(f"historial: no pude escribir {HISTORIAL_PATH.name}: {e}")
+
+
+def top_keywords_faltantes(historial: list[dict] | None = None) -> list[dict]:
+    """Cuenta cuantas veces aparece cada keyword faltante en el historial."""
+    if historial is None:
+        historial = cargar_historial()
+    conteo: dict[str, dict] = {}
+    for e in historial:
+        for kw in e.get("keywords_faltantes", []):
+            clave = (kw or "").strip().lower()
+            if not clave:
+                continue
+            if clave not in conteo:
+                conteo[clave] = {"keyword": kw.strip(), "veces": 0}
+            conteo[clave]["veces"] += 1
+    return sorted(conteo.values(), key=lambda x: x["veces"], reverse=True)
 
 # ──────────────────────────────────────────────────────────────────
 # PROPUESTA DE PERFIL (extraida de PDF, pendiente de aprobacion)
@@ -449,6 +509,7 @@ def analizar_contexto_logic(titulo: str, descripcion: str, imagen_bytes: bytes |
         CONTEXTO_PATH.write_text(json.dumps(ctx, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception as e:
         log.warning(f"analizar_contexto: no pude escribir {CONTEXTO_PATH.name}: {e}")
+    guardar_en_historial(ctx)
     return ctx
 
 
@@ -719,6 +780,7 @@ def ping():
         "propuesta_pendiente": PROPUESTA_PATH.exists(),
         "keys_configuradas": estado_ia["gemini_configurado"] or estado_ia["groq_configurado"],
         "ia_disponible": estado_ia["alguno_disponible"],
+        "historial_total": len(cargar_historial()),
     }
 
 
@@ -847,6 +909,133 @@ def descartar_propuesta():
     return {"ok": True}
 
 
+# ─── Generar CV (reescrito con keywords del historial) ────────────
+def _exp_orden_key(exp: dict) -> tuple:
+    """Clave para ordenar experiencias de mas reciente a mas antigua.
+    Usa el periodo (texto libre): 'actualidad/presente' pesa como ano 9999."""
+    periodo = (exp.get("periodo") or "").lower()
+    anios = [int(a) for a in re.findall(r"(?:19|20)\d{2}", periodo)]
+    actual = any(w in periodo for w in ("actual", "presente", "present", "current", "hoy"))
+    fin = 9999 if actual else (max(anios) if anios else 0)
+    inicio = min(anios) if anios else 0
+    return (fin, inicio)
+
+
+def ordenar_experiencia_reciente(exps: list) -> list:
+    """Ordena las experiencias por empleo mas reciente primero (no por relevancia)."""
+    if not isinstance(exps, list):
+        return exps
+    return sorted(exps, key=_exp_orden_key, reverse=True)
+
+
+def optimizar_cv_con_ia(perfil: dict, keywords: list[str]) -> dict:
+    """Clasifica cada keyword contra el perfil (tiene / transferible / no_tiene)
+    y reescribe el CV usando SOLO las respaldadas por experiencia real. Nunca
+    inventa: las 'no_tiene' jamas entran al CV (se devuelven como brechas).
+    Devuelve los campos optimizados + la clasificacion para ser transparente.
+    Usa IA.chat (cascada Gemini -> Groq con la API key configurada por el usuario)."""
+    perfil_json = json.dumps(perfil, ensure_ascii=False)
+    prompt = (
+        "Eres a la vez un redactor experto en CVs para filtros ATS y un auditor"
+        " HONESTO de habilidades. Mentir en un CV es la peor falta posible.\n"
+        "Te doy el PERFIL real de un candidato (tu UNICA fuente de verdad) y una"
+        " lista de KEYWORDS que los reclutadores piden.\n\n"
+        f"PERFIL:\n{perfil_json}\n\n"
+        f"KEYWORDS:\n{', '.join(keywords)}\n\n"
+        "PASO 1 — CLASIFICA cada keyword comparandola contra el PERFIL, en UNA categoria:\n"
+        "- \"tiene\": el perfil YA demuestra ese concepto, aunque este escrito con otras palabras. Ej: perfil dice 'gestion de redes sociales' y la keyword es 'community management'.\n"
+        "- \"transferible\": el perfil NO lo tiene literal, pero SI tiene algo cercano de la misma familia. Ej: keyword 'Salesforce' y el perfil tiene experiencia en otro CRM.\n"
+        "- \"no_tiene\": el perfil no muestra NADA que respalde la keyword. No hay base real.\n"
+        "Se ESTRICTO: ante la duda entre 'tiene' y 'transferible', elige 'transferible'; entre 'transferible' y 'no_tiene', elige 'no_tiene'. Es peor mentir que perder un punto.\n\n"
+        "PASO 2 — REESCRIBE el CV (perfil_profesional, vinetas de experiencia y habilidades) en formato Harvard:\n"
+        "- La experiencia va en VINETAS, no en parrafo. Cada vineta empieza con un VERBO DE ACCION en pasado (Lidere, Implemente, Aumente, Gestione) y, si el PERFIL lo respalda, incluye un resultado o cifra. Nunca inventes cifras.\n"
+        "- Usa LIBREMENTE los terminos de 'tiene' (son verdad, solo cambias el vocabulario al de la oferta).\n"
+        "- Para 'transferible': menciona la habilidad REAL cercana SIN afirmar el termino exacto. Ej: escribe 'experiencia en gestion de CRM y tickets', NO escribas 'Salesforce' si no lo uso.\n"
+        "- PROHIBIDO usar en CUALQUIER texto las keywords de 'no_tiene'. Nunca, ni insinuarlas.\n\n"
+        "Devuelve SOLO JSON valido (sin ```), con esta forma EXACTA:\n"
+        "{\n"
+        '  "clasificacion": {"tiene": ["..."], "transferible": ["..."], "no_tiene": ["..."]},\n'
+        '  "perfil_profesional": "resumen de 3-4 oraciones, honesto, que integre lo de tiene/transferible.",\n'
+        '  "experiencia": [{"vinetas": ["2-4 vinetas con verbo de accion + logro, usando lo que aplique a ESA experiencia"]}],\n'
+        '  "habilidades": ["habilidades reales del perfil, primero las que coinciden con la oferta. Nada de no_tiene."]\n'
+        "}\n\n"
+        "REGLAS:\n"
+        "- PROHIBIDO inventar cargos, empresas, herramientas o experiencia que no esten en el PERFIL.\n"
+        "- El array 'experiencia' debe tener el MISMO numero de items y en el MISMO orden que el perfil; solo reescribes las 'vinetas'.\n"
+        "- Cada keyword va en UNA sola categoria; la suma de las 3 listas = todas las keywords dadas.\n"
+        "- Nada de muletillas ('Soy un profesional con...'). Ve directo al valor.\n"
+    )
+    raw = (IA.chat(prompt, fallback="{}", max_tokens=2000) or "").strip()
+    if raw.startswith("```"):
+        raw = raw.strip("`")
+        if raw.lower().startswith("json"):
+            raw = raw[4:].strip()
+    try:
+        return json.loads(raw)
+    except Exception as e:
+        log.warning(f"optimizar_cv: JSON invalido ({e}). Devuelvo perfil sin optimizar.")
+        return {}
+
+
+class GenerarCVRequest(BaseModel):
+    optimizar: bool = True
+    perfil: dict | None = None  # borrador a optimizar; si es None usa el perfil guardado
+
+
+@app.post("/generar_cv")
+def generar_cv(req: GenerarCVRequest):
+    # Base: el borrador que mande la pestana (con experiencia recien agregada) o,
+    # si no manda nada, el perfil guardado. Siempre copia: no tocamos perfil.json.
+    base = req.perfil if isinstance(req.perfil, dict) and req.perfil else PERFIL
+    cv = json.loads(json.dumps(base))
+    keywords = [k["keyword"] for k in top_keywords_faltantes()][:15]
+    optimizado = False
+
+    clasificacion = {"tiene": [], "transferible": [], "no_tiene": []}
+    if req.optimizar and keywords:
+        opt = optimizar_cv_con_ia(cv, keywords)
+        if opt:
+            if opt.get("perfil_profesional"):
+                cv["perfil_profesional"] = opt["perfil_profesional"]
+            # Solo reemplazamos el texto de cada experiencia, por indice,
+            # conservando cargo/empresa/ubicacion/periodo originales (anti-invento).
+            exp_opt = opt.get("experiencia") or []
+            for i, e in enumerate(cv.get("experiencia", [])):
+                if i >= len(exp_opt) or not isinstance(exp_opt[i], dict):
+                    continue
+                vinetas = exp_opt[i].get("vinetas")
+                if isinstance(vinetas, list) and vinetas:
+                    e["vinetas"] = [str(v).strip() for v in vinetas if str(v).strip()]
+                    e.pop("descripcion", None)  # el render usa vinetas
+                elif exp_opt[i].get("descripcion"):  # compat con formato viejo
+                    e["descripcion"] = exp_opt[i]["descripcion"]
+            if isinstance(opt.get("habilidades"), list) and opt["habilidades"]:
+                cv["habilidades"] = opt["habilidades"]
+            cl = opt.get("clasificacion") or {}
+            for k in clasificacion:
+                v = cl.get(k)
+                if isinstance(v, list):
+                    clasificacion[k] = [str(x).strip() for x in v if str(x).strip()]
+            optimizado = True
+
+    # Orden cronologico: empleo mas reciente primero (no por relevancia).
+    cv["experiencia"] = ordenar_experiencia_reciente(cv.get("experiencia", []))
+
+    log.info(
+        f"/generar_cv: optimizado={optimizado}, keywords={len(keywords)}, "
+        f"tiene={len(clasificacion['tiene'])} transferible={len(clasificacion['transferible'])} "
+        f"no_tiene={len(clasificacion['no_tiene'])}"
+    )
+    return {
+        "ok": True,
+        "cv": cv,
+        "keywords_disponibles": keywords,
+        "optimizado": optimizado,
+        "clasificacion": clasificacion,
+        "por_aprender": clasificacion["no_tiene"],  # nunca entran al CV
+    }
+
+
 @app.post("/analizar")
 def analizar(req: AnalizarRequest):
     imagen_bytes: bytes | None = None
@@ -867,6 +1056,28 @@ def analizar(req: AnalizarRequest):
     if score is not None:
         log.info(f"  -> score: {score}/100. {ctx.get('justificacion', '')[:150]}")
     return ctx
+
+
+@app.get("/historial_keywords")
+def historial_keywords():
+    historial = cargar_historial()
+    return {
+        "ok": True,
+        "total": len(historial),
+        "max": HISTORIAL_MAX,
+        "entradas": list(reversed(historial)),  # mas reciente primero
+        "top_faltantes": top_keywords_faltantes(historial),
+    }
+
+
+@app.post("/limpiar_historial")
+def limpiar_historial():
+    try:
+        if HISTORIAL_PATH.exists():
+            HISTORIAL_PATH.unlink()
+    except Exception as e:
+        log.warning(f"No pude borrar {HISTORIAL_PATH.name}: {e}")
+    return {"ok": True}
 
 
 @app.post("/limpiar_contexto")

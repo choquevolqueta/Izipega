@@ -280,10 +280,32 @@ async function pingServer() {
     } else {
       propuestaAviso.classList.add("hidden");
     }
+    actualizarBotonCV(data.historial_total || 0);
     return true;
   } catch (e) {
     setStatus(false, "servidor offline");
     return false;
+  }
+}
+
+// El boton "Crear CV" se activa solo cuando hay suficientes analisis acumulados.
+const UMBRAL_CV = 5;
+function actualizarBotonCV(total) {
+  const btn = $("#btn-crear-cv");
+  const hint = $("#cv-hint");
+  if (!btn) return;
+  if (total >= UMBRAL_CV) {
+    btn.disabled = false;
+    if (hint) {
+      hint.textContent = `Listo: ${total} análisis acumulados.`;
+      hint.classList.add("lista");
+    }
+  } else {
+    btn.disabled = true;
+    if (hint) {
+      hint.textContent = `Analiza ${UMBRAL_CV - total} oferta(s) más para activar (llevas ${total}/${UMBRAL_CV}).`;
+      hint.classList.remove("lista");
+    }
   }
 }
 
@@ -594,6 +616,11 @@ $("#btn-editar-perfil").addEventListener("click", () => {
   chrome.tabs.create({ url });
 });
 
+$("#btn-crear-cv").addEventListener("click", () => {
+  const url = chrome.runtime.getURL("cv.html");
+  chrome.tabs.create({ url });
+});
+
 // ──────────────────────────────────────────────────────────────────
 // PANEL DE RESPUESTAS CURADAS (cuando el aplicar al DOM fallo)
 // ──────────────────────────────────────────────────────────────────
@@ -745,7 +772,9 @@ for (const inp of [inputGeminiKey, inputGroqKey]) {
 // EVENTOS
 // ──────────────────────────────────────────────────────────────────
 btnAnalizar.addEventListener("click", () =>
-  conCargando(btnAnalizar, "Analizando...", accionAnalizar).catch((e) => log(String(e), "error"))
+  conCargando(btnAnalizar, "Analizando...", accionAnalizar)
+    .then(() => pingServer()) // refresca el contador del boton "Crear CV"
+    .catch((e) => log(String(e), "error"))
 );
 btnRellenar.addEventListener("click", () =>
   conCargando(btnRellenar, "Rellenando...", () => accionRellenar(false)).catch((e) => log(String(e), "error"))

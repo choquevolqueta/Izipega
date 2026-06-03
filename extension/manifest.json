@@ -53,7 +53,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["revisar.html", "revisar.js", "revisar.css", "editar_perfil.html", "editar_perfil.js", "editar_perfil.css"],
+      "resources": ["revisar.html", "revisar.js", "revisar.css", "editar_perfil.html", "editar_perfil.js", "editar_perfil.css", "cv.html", "cv.js", "cv.css"],
       "matches": ["<all_urls>"]
     }
   ]
