@@ -1,300 +1,5 @@
 [
   {
-    "fecha": "2026-06-02T19:35:03",
-    "cargo_objetivo": "Líder de Modulo / Mall Easton Quilicura",
-    "empresa": "La Casa de las Carcasas",
-    "score_idoneidad": 65,
-    "keywords_faltantes": [
-      "Liderazgo de equipos",
-      "Análisis de KPI's",
-      "Gestión de stock",
-      "Visual merchandising",
-      "Retail",
-      "Formación de equipos",
-      "Organización"
-    ],
-    "keywords_coincidentes": [
-      "Atención al cliente",
-      "Ventas directas",
-      "Negociación",
-      "Fidelización",
-      "Resolución de conflictos",
-      "Trabajo bajo presión",
-      "Orientación al detalle",
-      "Gestión de reclamos"
-    ],
-    "keywords_ats": [
-      "Liderazgo de equipos",
-      "Gestión de equipos",
-      "Ventas",
-      "Atención al cliente",
-      "Experiencia al cliente",
-      "Análisis de KPI's",
-      "Gestión de stock",
-      "Visual merchandising",
-      "Retail",
-      "Enfoque en objetivos",
-      "Resultados",
-      "Formación de equipos",
-      "Organización"
-    ]
-  },
-  {
-    "fecha": "2026-06-02T19:36:24",
-    "cargo_objetivo": "Vendedor Part Time",
-    "empresa": "Skechers Chile",
-    "score_idoneidad": 85,
-    "keywords_faltantes": [
-      "Manejo POS",
-      "Conocimiento calzado",
-      "Matemáticas para ventas",
-      "Visual merchandising",
-      "Confidencialidad",
-      "Cumplimiento normativo",
-      "Recepción de mercadería"
-    ],
-    "keywords_coincidentes": [
-      "Atención al cliente",
-      "Ventas retail",
-      "Técnicas de venta",
-      "Cierre de ventas",
-      "Servicio personalizado",
-      "Comunicación profesional",
-      "Gestión de reclamos",
-      "Negociación",
-      "Gestión de inventario"
-    ],
-    "keywords_ats": [
-      "Ventas retail",
-      "Atención al cliente",
-      "Técnicas de venta",
-      "Manejo POS",
-      "Gestión de inventario",
-      "Visual merchandising",
-      "Conocimiento calzado",
-      "Matemáticas para ventas",
-      "Servicio personalizado",
-      "Comunicación profesional",
-      "Confidencialidad",
-      "Cumplimiento normativo",
-      "Recepción de mercadería",
-      "Cierre de ventas"
-    ]
-  },
-  {
-    "fecha": "2026-06-02T19:38:14",
-    "cargo_objetivo": "Auxiliar de Bodega Diurno",
-    "empresa": "Skechers Chile",
-    "score_idoneidad": 88,
-    "keywords_faltantes": [
-      "Transportador portátil"
-    ],
-    "keywords_coincidentes": [
-      "Carga y descarga de productos",
-      "Operaciones de bodega",
-      "Centro de distribución",
-      "Recepción de productos",
-      "Manipulación de productos",
-      "Despacho de productos",
-      "Adherencia a procedimientos"
-    ],
-    "keywords_ats": [
-      "Auxiliar de Bodega",
-      "Carga y descarga de productos",
-      "Transportador portátil",
-      "Operaciones de bodega",
-      "Centro de distribución",
-      "Recepción de productos",
-      "Manipulación de productos",
-      "Despacho de productos",
-      "Procedimientos de bodega",
-      "Junior"
-    ]
-  },
-  {
-    "fecha": "2026-06-02T19:39:18",
-    "cargo_objetivo": "Vendedor/a Full Time Crocs Costanera Center",
-    "empresa": "Forus",
-    "score_idoneidad": 75,
-    "keywords_faltantes": [
-      "Visa definitiva",
-      "Pasión por el retail"
-    ],
-    "keywords_coincidentes": [
-      "Ventas",
-      "Retail",
-      "Atención al cliente",
-      "Experiencia retail",
-      "Enseñanza media completa",
-      "Mayoría de edad",
-      "Orientación a metas",
-      "Documentación vigente"
-    ],
-    "keywords_ats": [
-      "Ventas",
-      "Retail",
-      "Atención al cliente",
-      "Experiencia retail",
-      "Enseñanza media completa",
-      "Visa definitiva",
-      "Mayoría de edad",
-      "Orientación a metas",
-      "Pasión por el retail",
-      "Documentación vigente"
-    ]
-  },
-  {
-    "fecha": "2026-06-02T19:41:02",
-    "cargo_objetivo": "Ejecutivo(a) de Televentas",
-    "empresa": "Vista Multinacional de Contac Center",
-    "score_idoneidad": 75,
-    "keywords_faltantes": [
-      "Productos bancarios o financieros",
-      "Créditos de Consumo",
-      "Tarjetas de Crédito y Upgrade",
-      "Avances y Refinanciamientos",
-      "Comercialización de productos financieros",
-      "Call Center",
-      "Manejo de PC nivel usuario"
-    ],
-    "keywords_coincidentes": [
-      "Enseñanza Media Completa",
-      "Ventas directas",
-      "Negociación",
-      "Comunicación efectiva",
-      "Atención al cliente",
-      "Perfil comercial",
-      "Fidelización",
-      "Gestión de reclamos",
-      "Orientación al detalle"
-    ],
-    "keywords_ats": [
-      "Ejecutivo(a) de Televentas",
-      "Productos financieros",
-      "Créditos de Consumo",
-      "Tarjetas de Crédito",
-      "Ventas",
-      "Call Center",
-      "Manejo PC usuario",
-      "Perfil comercial",
-      "Orientación a metas",
-      "Comunicación",
-      "Negociación",
-      "Experiencia ventas financieras",
-      "Rubro Retail",
-      "Bancarios",
-      "Refinanciamientos"
-    ]
-  },
-  {
-    "fecha": "2026-06-02T19:45:06",
-    "cargo_objetivo": "Sales Advisor 20 hrs – Hair Care Store",
-    "empresa": "Tua Retail",
-    "score_idoneidad": 65,
-    "keywords_faltantes": [
-      "Hair Care Store",
-      "Mens Grooming Store",
-      "Cuidado capilar masculino",
-      "Tendencias de estilo",
-      "Pasión por asesorar",
-      "Asesoramiento de imagen"
-    ],
-    "keywords_coincidentes": [
-      "Retail",
-      "Atención al cliente",
-      "Servicio al cliente",
-      "Actitud comercial",
-      "Ventas directas",
-      "Negociación",
-      "Fidelización",
-      "Resolución de conflictos"
-    ],
-    "keywords_ats": [
-      "Sales Advisor",
-      "Hair Care Store",
-      "Retail",
-      "Hair Care Advisor",
-      "Mens Grooming Store",
-      "Cuidado capilar masculino",
-      "Tendencias de estilo",
-      "Actitud comercial",
-      "Servicio al cliente",
-      "Asesoramiento",
-      "Potenciar imagen",
-      "Cuidar cabello",
-      "Fortalecer confianza",
-      "Pasión por asesorar"
-    ]
-  },
-  {
-    "fecha": "2026-06-02T19:46:26",
-    "cargo_objetivo": "Visual Merchandiser Field (Terreno)",
-    "empresa": "",
-    "score_idoneidad": 45,
-    "keywords_faltantes": [
-      "Visual Merchandising",
-      "Exhibición de productos",
-      "Análisis de desempeño comercial",
-      "Análisis de indicadores comerciales",
-      "Rotación de productos",
-      "Cumplimiento de campañas",
-      "Implementación de campañas de visual merchandising",
-      "Planificación de visitas"
-    ],
-    "keywords_coincidentes": [
-      "Ventas",
-      "Retail",
-      "Orientación al detalle",
-      "Mirada comercial",
-      "Capacidad de ejecutar"
-    ],
-    "keywords_ats": [
-      "Visual Merchandiser Field",
-      "Terreno",
-      "Retail",
-      "Exhibición de productos",
-      "Estrategias de visual merchandising",
-      "Desempeño comercial",
-      "Análisis de ventas",
-      "Rotación de productos",
-      "Experiencia de marca en tienda",
-      "Implementación de campañas",
-      "Planificación de visitas",
-      "Indicadores comerciales",
-      "Mirada comercial",
-      "Orientación al detalle",
-      "Capacidad de ejecutar"
-    ]
-  },
-  {
-    "fecha": "2026-06-02T19:48:05",
-    "cargo_objetivo": "Asistente de Retail / Apoyo Multifuncional",
-    "empresa": "",
-    "score_idoneidad": 88,
-    "keywords_faltantes": [],
-    "keywords_coincidentes": [
-      "Retail",
-      "Atención al cliente",
-      "Ventas",
-      "Enseñanza Media Completa",
-      "Orden de productos",
-      "Reposición",
-      "Bodega",
-      "Punto de venta"
-    ],
-    "keywords_ats": [
-      "Retail",
-      "Atención de Clientes",
-      "Ventas",
-      "Enseñanza media completa",
-      "Orden de productos",
-      "Reposición",
-      "Punto de venta",
-      "Bodega",
-      "Experiencia comprobable"
-    ]
-  },
-  {
     "fecha": "2026-06-02T19:50:39",
     "cargo_objetivo": "Encargado de Bodega Tienda Retail Santiago Centro",
     "empresa": "Importante empresa de retail",
@@ -363,6 +68,297 @@
       "Flexible",
       "Adaptabilidad",
       "Operaciones de tienda"
+    ]
+  },
+  {
+    "fecha": "2026-06-07T23:39:39",
+    "cargo_objetivo": "Tecnico de Apoyo",
+    "empresa": "Confidencial",
+    "score_idoneidad": 25,
+    "keywords_faltantes": [
+      "Conocimientos técnicos en electricidad",
+      "Conocimientos técnicos en telecomunicación",
+      "Conocimientos técnicos en electrónica",
+      "Montaje e instalación física de racks",
+      "Ensamblar racks",
+      "Nivelar y fijar racks",
+      "Instalar accesorios de racks",
+      "PDU",
+      "blanking panel",
+      "alimentación redundante",
+      "tomas de energía",
+      "cables de poder",
+      "verificación de tierra",
+      "power-up inicial controlado",
+      "Habilidades analíticas"
+    ],
+    "keywords_coincidentes": [
+      "Trabajo en equipo",
+      "Responsabilidad",
+      "Trabajo bajo presión"
+    ],
+    "keywords_ats": [
+      "Tecnico de Apoyo",
+      "electricidad",
+      "telecomunicacion",
+      "electronica",
+      "montaje de racks",
+      "instalacion de racks",
+      "PDU",
+      "cables de poder",
+      "puesta a tierra",
+      "power-up",
+      "habilidades analíticas",
+      "trabajo en equipo",
+      "responsabilidad",
+      "trabajo bajo presión",
+      "experiencia junior"
+    ]
+  },
+  {
+    "fecha": "2026-06-07T23:40:34",
+    "cargo_objetivo": "Apoyo Logístico - Providencia",
+    "empresa": "Farmacias Ahumada SPA",
+    "score_idoneidad": 80,
+    "keywords_faltantes": [
+      "manejo de inventario",
+      "recepción de mercadería",
+      "reposición de productos",
+      "actualización de precios",
+      "limpieza",
+      "logística",
+      "bodega"
+    ],
+    "keywords_coincidentes": [
+      "Enseñanza Media Completa",
+      "Operario de Producción",
+      "gestión de operaciones",
+      "centros de distribución",
+      "Orientación al detalle",
+      "orden"
+    ],
+    "keywords_ats": [
+      "Apoyo Logístico",
+      "inventario",
+      "recepción de mercadería",
+      "reposición de productos",
+      "actualización de precios",
+      "orden",
+      "limpieza",
+      "logística",
+      "bodega",
+      "enseñanza media completa",
+      "junior"
+    ]
+  },
+  {
+    "fecha": "2026-06-07T23:43:05",
+    "cargo_objetivo": "Auxiliar de Apoyo",
+    "empresa": "Nueva Clínica Cordillera",
+    "score_idoneidad": 45,
+    "keywords_faltantes": [
+      "experiencia área clínica",
+      "experiencia mínima en el cargo",
+      "Compromiso",
+      "responsabilidad"
+    ],
+    "keywords_coincidentes": [
+      "Atención al cliente",
+      "Servicio al huésped",
+      "Resolución de conflictos",
+      "Trabajo bajo presión",
+      "Comunicación efectiva",
+      "Orientación al detalle",
+      "Adaptación rápida"
+    ],
+    "keywords_ats": [
+      "Auxiliar de Apoyo",
+      "experiencia mínima en el cargo",
+      "experiencia área clínica",
+      "compromiso",
+      "responsabilidad",
+      "orientación al servicio",
+      "4° turno"
+    ]
+  },
+  {
+    "fecha": "2026-06-07T23:46:58",
+    "cargo_objetivo": "Runner",
+    "empresa": "Soler",
+    "score_idoneidad": 95,
+    "keywords_faltantes": [],
+    "keywords_coincidentes": [
+      "Apoyo de Garzón",
+      "hospitalidad",
+      "atención al cliente",
+      "servicio al huésped",
+      "trabajo bajo presión",
+      "orientación al detalle",
+      "trabajo en equipo"
+    ],
+    "keywords_ats": [
+      "Runner",
+      "Ayudante de garzón",
+      "restaurante",
+      "servicio en restaurante",
+      "asistencia a garzones",
+      "atención al cliente"
+    ]
+  },
+  {
+    "fecha": "2026-06-09T12:40:56",
+    "cargo_objetivo": "Asistente de Andén Part Time 20 hrs y 30 hrs",
+    "empresa": "Flix",
+    "score_idoneidad": 85,
+    "keywords_faltantes": [
+      "Asistente de Andén",
+      "Embarque de pasajeros",
+      "Desembarque de pasajeros",
+      "Operaciones (específicas de terminal/flujo de pasajeros)"
+    ],
+    "keywords_coincidentes": [
+      "Atención al cliente",
+      "Servicio al huésped",
+      "Resolución de conflictos",
+      "Trabajo bajo presión",
+      "Comunicación efectiva",
+      "Orientación al detalle",
+      "Experiencia previa",
+      "Proactiva",
+      "Responsable",
+      "Actitud colaborativa"
+    ],
+    "keywords_ats": [
+      "Asistente de Andén",
+      "Atención al cliente",
+      "Operaciones",
+      "Embarque",
+      "Desembarque",
+      "Experiencia previa",
+      "Proactiva",
+      "Responsable",
+      "Orientación al servicio",
+      "Comunicación",
+      "Interpersonales",
+      "Trabajo bajo presión",
+      "Colaborativa",
+      "Junior"
+    ]
+  },
+  {
+    "fecha": "2026-06-09T12:45:27",
+    "cargo_objetivo": "Vacantes Temporada Alta Invierno 2026",
+    "empresa": "Parque Zoologico Buin Zoo S.A.",
+    "score_idoneidad": 88,
+    "keywords_faltantes": [
+      "manejo de caja",
+      "ayudante de cocina",
+      "auxiliar de aseo",
+      "temporada alta",
+      "bioparque"
+    ],
+    "keywords_coincidentes": [
+      "atención al cliente",
+      "ventas",
+      "servicio al huésped",
+      "garzón",
+      "servicio en mesa",
+      "asistente de bodega"
+    ],
+    "keywords_ats": [
+      "atención al cliente",
+      "ventas",
+      "manejo de caja",
+      "servicio en mesa",
+      "ayudante de cocina",
+      "asistente de bodega",
+      "auxiliar de aseo",
+      "temporada alta",
+      "bioparque",
+      "restaurant",
+      "anfitrión",
+      "garzón"
+    ]
+  },
+  {
+    "fecha": "2026-06-09T12:54:38",
+    "cargo_objetivo": "Asistente de Bodega Calzado",
+    "empresa": "Falabella Retail Chile",
+    "score_idoneidad": 85,
+    "keywords_faltantes": [
+      "Calzado",
+      "Uso de herramientas tecnológicas (para alocar productos sistémicamente)",
+      "Toma de inventario",
+      "Ingresar información al sistema",
+      "Rastrear productos perdidos",
+      "Mantener planilla actualizada",
+      "Verificación de documentación (mercadería, guías, códigos)"
+    ],
+    "keywords_coincidentes": [
+      "Enseñanza Media Completa",
+      "Retail",
+      "Experiencia en retail",
+      "Experiencia en bodega",
+      "Experiencia en reposición",
+      "Operario de Producción",
+      "Almacenar productos",
+      "Recibir productos",
+      "Entregar productos",
+      "Surtir productos",
+      "Atención al cliente",
+      "Resolución de conflictos",
+      "Trabajo bajo presión",
+      "Orientación al detalle"
+    ],
+    "keywords_ats": [
+      "Asistente de Bodega",
+      "Calzado",
+      "Retail",
+      "Almacenamiento",
+      "Inventario",
+      "Reposición",
+      "Verificación de mercadería",
+      "Herramientas tecnológicas",
+      "Operaciones de bodega",
+      "Enseñanza Media Completa",
+      "Gestión de stock",
+      "Surtido de productos",
+      "Bodeguero",
+      "Auxiliar de Abastecimiento",
+      "Operario de Producción"
+    ]
+  },
+  {
+    "fecha": "2026-06-09T12:55:53",
+    "cargo_objetivo": "Vendedor",
+    "empresa": "Guante, Gacel, Anacapri",
+    "score_idoneidad": 88,
+    "keywords_faltantes": [
+      "Entusiastas",
+      "Respetuosas",
+      "Calzado"
+    ],
+    "keywords_coincidentes": [
+      "Enseñanza Media Completa",
+      "Ventas directas",
+      "Atención al cliente",
+      "Orientación al cliente",
+      "Servicio al cliente",
+      "Resolución de conflictos",
+      "Fidelización",
+      "Negociación",
+      "Vendedor"
+    ],
+    "keywords_ats": [
+      "vendedor",
+      "ventas",
+      "atención al cliente",
+      "orientación al cliente",
+      "entusiastas",
+      "respetuosas",
+      "calzado",
+      "enseñanza media completa",
+      "servicio al cliente"
     ]
   }
 ]

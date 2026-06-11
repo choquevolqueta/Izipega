@@ -245,9 +245,42 @@ async function guardarEnPerfil() {
   }
 }
 
+// Descarga el CV como PDF nativo generado por el servidor. NO usamos
+// window.print(): ese PDF del navegador sale con una capa de texto que los
+// lectores de CV de portales (Laborum/Bumeran) no pueden extraer ("sube pero
+// queda vacío"). El del servidor lleva texto real, parseable por cualquier ATS.
+async function descargarPdf() {
+  if (!cvActual) return;
+  setStatus("Generando PDF…", "info");
+  setBusy(true);
+  try {
+    const r = await fetch(`${SERVER_URL}/generar_cv_pdf`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ perfil: cvActual }),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const nombre = (cvActual.nombre || "CV").trim().replace(/\s+/g, "_");
+    a.download = `CV_${nombre}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    setStatus("PDF descargado ✓", "ok");
+  } catch (e) {
+    setStatus("No pude generar el PDF (¿servidor encendido?)", "error");
+  } finally {
+    setBusy(false);
+  }
+}
+
 // ── Listeners ──
 btnRegenerar.addEventListener("click", () => generar(chkOptimizar.checked));
-btnPdf.addEventListener("click", () => window.print());
+btnPdf.addEventListener("click", descargarPdf);
 btnGuardarPerfil.addEventListener("click", guardarEnPerfil);
 
 btnToggleExp.addEventListener("click", () => formExp.classList.toggle("hidden"));
