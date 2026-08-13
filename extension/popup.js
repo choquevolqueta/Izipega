@@ -23,8 +23,8 @@ const btnElegirPdf = $("#btn-elegir-pdf");
 const propuestaAviso = $("#propuesta-aviso");
 const btnAbrirRevision = $("#btn-abrir-revision");
 const panelConfigKeys = $("#config-keys");
+const inputDeepseekKey = $("#input-deepseek-key");
 const inputGeminiKey = $("#input-gemini-key");
-const inputGroqKey = $("#input-groq-key");
 const btnGuardarKeys = $("#btn-guardar-keys");
 const btnConfigKeys = $("#btn-config-keys");
 const btnCerrarConfig = $("#btn-cerrar-config");
@@ -293,6 +293,7 @@ const UMBRAL_CV = 5;
 function actualizarBotonCV(total) {
   const btn = $("#btn-crear-cv");
   const hint = $("#cv-hint");
+  const btnReset = $("#btn-reset-historial");
   if (!btn) return;
   if (total >= UMBRAL_CV) {
     btn.disabled = false;
@@ -306,6 +307,21 @@ function actualizarBotonCV(total) {
       hint.textContent = `Analiza ${UMBRAL_CV - total} oferta(s) más para activar (llevas ${total}/${UMBRAL_CV}).`;
       hint.classList.remove("lista");
     }
+  }
+  if (btnReset) btnReset.classList.toggle("hidden", total === 0);
+}
+
+async function accionReiniciarHistorial() {
+  const ok = window.confirm(
+    "Esto borra los analisis acumulados para el CV (util si vas a apuntar a otra orientacion). No afecta tu perfil guardado. ¿Continuar?"
+  );
+  if (!ok) return;
+  try {
+    const r = await fetch(`${SERVER_URL}/limpiar_historial`, { method: "POST" });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    await pingServer();
+  } catch (e) {
+    log(`No se pudo reiniciar el acumulador: ${e.message}`, "error");
   }
 }
 
@@ -621,6 +637,8 @@ $("#btn-crear-cv").addEventListener("click", () => {
   chrome.tabs.create({ url });
 });
 
+$("#btn-reset-historial").addEventListener("click", accionReiniciarHistorial);
+
 // ──────────────────────────────────────────────────────────────────
 // PANEL DE RESPUESTAS CURADAS (cuando el aplicar al DOM fallo)
 // ──────────────────────────────────────────────────────────────────
@@ -694,16 +712,15 @@ async function cargarEstadoKeys() {
     const r = await fetch(`${SERVER_URL}/estado_keys`);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const data = await r.json();
-    const algunaConfig = data.gemini_configurado || data.groq_configurado;
+    const algunaConfig = data.deepseek_configurado || data.gemini_configurado;
     // Recordar en chrome.storage solo para UX (no es la fuente de verdad)
     chrome.storage.local.set({ keys_configuradas: algunaConfig });
     if (!algunaConfig) {
-      log("No hay API keys configuradas. Configura al menos una.", "info");
+      log("No hay API key configurada. Pega tu key de DeepSeek.", "info");
       mostrarConfigKeys();
-      setEstadoConfig("Pega tu key de Gemini o Groq y guarda.", "");
+      setEstadoConfig("Pega tu API key de DeepSeek (y Gemini para vision) y guarda.", "");
     } else if (!data.alguno_disponible) {
-      // Hay key guardada pero el cliente no arranco (key invalida posiblemente)
-      log("Las keys guardadas no funcionan. Revisa que sean validas.", "error");
+      log("Las keys guardadas no funcionan. Revisalas.", "error");
       mostrarConfigKeys();
       setEstadoConfig("Las keys guardadas no funcionan. Revisalas.", "error");
     } else {
@@ -717,10 +734,10 @@ async function cargarEstadoKeys() {
 }
 
 async function guardarKeys() {
+  const deepseek = inputDeepseekKey.value.trim();
   const gemini = inputGeminiKey.value.trim();
-  const groq = inputGroqKey.value.trim();
-  if (!gemini && !groq) {
-    setEstadoConfig("Pega al menos una key.", "error");
+  if (!deepseek && !gemini) {
+    setEstadoConfig("Pega al menos la API key de DeepSeek.", "error");
     return;
   }
 
@@ -731,8 +748,8 @@ async function guardarKeys() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        deepseek_api_key: deepseek,
         gemini_api_key: gemini,
-        groq_api_key: groq,
       }),
     });
     if (!r.ok) {
@@ -742,14 +759,16 @@ async function guardarKeys() {
     const data = await r.json();
     if (data.alguno_disponible) {
       setEstadoConfig("OK. Listo para usar.", "ok");
-      log("API keys configuradas correctamente.", "ok");
+      const partes = ["DeepSeek configurado"];
+      if (data.gemini_configurado) partes.push("Gemini listo para vision");
+      log(`API keys: ${partes.join(", ")}.`, "ok");
       // Limpiamos los inputs por seguridad visual
+      inputDeepseekKey.value = "";
       inputGeminiKey.value = "";
-      inputGroqKey.value = "";
       chrome.storage.local.set({ keys_configuradas: true });
       setTimeout(ocultarConfigKeys, 800);
     } else {
-      setEstadoConfig("Guardadas, pero ningun cliente arranco. Revisa las keys.", "error");
+      setEstadoConfig("Guardada, pero el cliente no arranco. Revisa la key.", "error");
     }
   } catch (e) {
     setEstadoConfig(`Error: ${e.message}`, "error");
@@ -761,12 +780,10 @@ async function guardarKeys() {
 btnGuardarKeys.addEventListener("click", guardarKeys);
 btnConfigKeys.addEventListener("click", () => mostrarConfigKeys({ forzar: true }));
 btnCerrarConfig.addEventListener("click", ocultarConfigKeys);
-// Enter en cualquiera de los inputs envia
-for (const inp of [inputGeminiKey, inputGroqKey]) {
-  inp.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") guardarKeys();
-  });
-}
+// Enter en el input envia
+inputDeepseekKey.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") guardarKeys();
+});
 
 // ──────────────────────────────────────────────────────────────────
 // EVENTOS

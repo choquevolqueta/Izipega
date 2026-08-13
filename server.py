@@ -13,28 +13,47 @@ de idoneidad, keywords) que enriquece las respuestas posteriores de /rellenar.
 
 Sin contexto, /rellenar tambien funciona: solo usa el perfil + la pregunta.
 
-Esta version usa Gemini (primario) + Groq (fallback). Las API keys se
-configuran desde la extension via POST /configurar_keys, que escribe el .env
-local y reinicia los clientes IA.
+Usa DeepSeek (API compatible con OpenAI) como unico proveedor de IA.
+La API key se configura desde la extension via POST /configurar_keys,
+que escribe el .env local y reinicia el cliente.
+
+Este archivo solo define las rutas de FastAPI. La logica vive en:
+- perfil_store.py  estado + persistencia del perfil, contexto, historial
+- ia_logic.py      prompts y llamadas a la IA
+- cv_export.py     orden cronologico, vinetas y render del PDF
+- models.py        modelos Pydantic de request/response
 """
 
 from __future__ import annotations
 
-import io
 import json
 import logging
 import os
 import re
-import shutil
 from datetime import datetime
-from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from pypdf import PdfReader
 
+import perfil_store
+from cv_export import construir_cv_pdf, ordenar_experiencia_reciente
 from ia_client import get_ia, reload_ia
+from ia_logic import (
+    analizar_contexto_logic,
+    extraer_texto_pdf,
+    optimizar_cv_con_ia,
+    proponer_perfil_desde_texto,
+    rellenar_campo,
+)
+from models import (
+    AnalizarRequest,
+    AplicarPerfilRequest,
+    ConfigurarKeysRequest,
+    GenerarCVRequest,
+    RellenarRequest,
+    RellenarResponse,
+    Respuesta,
+)
 
 # ──────────────────────────────────────────────────────────────────
 # LOGGING
@@ -52,558 +71,7 @@ logging.basicConfig(
 )
 log = logging.getLogger("server")
 
-# ──────────────────────────────────────────────────────────────────
-# PERFIL
-# ──────────────────────────────────────────────────────────────────
-PERFIL_PATH = Path(__file__).parent / "perfil.json"
-ENV_PATH = Path(__file__).parent / ".env"
-
-
-def _construir_perfil_resumido(p: dict) -> str:
-    estudios = p.get("estudios") or [{}]
-    primer_estudio = estudios[0] if estudios else {}
-    idiomas = p.get("idiomas") or []
-    return (
-        f"Nombre: {p.get('nombre', '')}\n"
-        f"Edad: {p.get('edad', '')}\n"
-        f"Ciudad: {p.get('ciudad', '')}, {p.get('comuna', '')}\n"
-        f"Profesion: {primer_estudio.get('titulo', '')}\n"
-        f"Perfil: {(p.get('perfil_profesional') or '')[:300]}\n"
-        f"Habilidades: {', '.join((p.get('habilidades') or [])[:6])}\n"
-        f"Idiomas: {', '.join((i.get('idioma', '') + ' ' + i.get('nivel', '')) for i in idiomas)}"
-    )
-
-
-with open(PERFIL_PATH, encoding="utf-8") as f:
-    PERFIL = json.load(f)
-
-PERFIL_RESUMIDO = _construir_perfil_resumido(PERFIL)
-
-# Schema canonico que se le muestra a la IA al extraer un perfil desde PDF.
-# Un item poblado por array fija las subclaves correctas y evita que la IA
-# invente nombres (p.ej. "puesto" en vez de "cargo", o idiomas como strings).
-SCHEMA_EJEMPLO = {
-    "nombre": "Nombre Apellido",
-    "edad": 30,
-    "ciudad": "Santiago",
-    "comuna": "Providencia",
-    "telefono": "+56 9 1234 5678",
-    "email": "correo@ejemplo.com",
-    "nacionalidad": "Chilena",
-    "perfil_profesional": "Breve resumen profesional de 2-4 oraciones.",
-    "experiencia": [
-        {
-            "cargo": "Titulo del puesto",
-            "empresa": "Nombre de la empresa",
-            "ubicacion": "Ciudad, Pais",
-            "periodo": "Marzo 2020 - Marzo 2025",
-            "descripcion": "Descripcion de tareas y logros, en un solo string."
-        }
-    ],
-    "estudios": [
-        {
-            "titulo": "Carrera o titulo obtenido",
-            "institucion": "Nombre de la institucion",
-            "ubicacion": "Ciudad, Pais",
-            "anio_egreso": 2023
-        }
-    ],
-    "habilidades": ["habilidad 1", "habilidad 2"],
-    "herramientas": ["herramienta 1", "herramienta 2"],
-    "idiomas": [
-        {"idioma": "Español", "nivel": "Nativo"}
-    ],
-    "motivacion": "Texto motivacional...",
-    "disponibilidad": "inmediata",
-    "expectativa_sueldo": "a convenir",
-    "modalidad_preferida": "presencial, hibrido o remoto",
-    "fortalezas": ["fortaleza 1", "fortaleza 2"],
-    "redes": {
-        "linkedin": "https://www.linkedin.com/in/usuario",
-        "portafolio_web": "https://miportafolio.com",
-        "behance": "https://www.behance.net/usuario"
-    },
-    "respuestas_extra": {
-        "por_que_este_cargo": "...",
-        "licencia_conducir": "si/no",
-        "residencia_legal": "..."
-    },
-    "cv_archivo": "nombre_del_archivo.pdf"
-}
-
 IA = get_ia()
-
-# ──────────────────────────────────────────────────────────────────
-# CONTEXTO ACTUAL (opcional — solo si se uso /analizar)
-# ──────────────────────────────────────────────────────────────────
-CONTEXTO_PATH = Path(__file__).parent / "contexto_actual.json"
-_CONTEXTO: dict | None = None
-
-# ──────────────────────────────────────────────────────────────────
-# HISTORIAL DE KEYWORDS (ultimas N ofertas analizadas)
-# Sirve para reescribir el CV: acumula las keywords que faltan en el
-# perfil a lo largo de varias ofertas y muestra cuales se repiten mas.
-# ──────────────────────────────────────────────────────────────────
-HISTORIAL_PATH = Path(__file__).parent / "historial_keywords.json"
-HISTORIAL_MAX = 10
-
-
-def cargar_historial() -> list[dict]:
-    if HISTORIAL_PATH.exists():
-        try:
-            data = json.loads(HISTORIAL_PATH.read_text(encoding="utf-8"))
-            return data if isinstance(data, list) else []
-        except Exception as e:
-            log.warning(f"historial: no pude leer {HISTORIAL_PATH.name}: {e}")
-    return []
-
-
-def guardar_en_historial(ctx: dict) -> None:
-    """Anade el analisis actual al historial (ring buffer de HISTORIAL_MAX)."""
-    if not ctx or not ctx.get("cargo_objetivo"):
-        return
-    entrada = {
-        "fecha": datetime.now().isoformat(timespec="seconds"),
-        "cargo_objetivo": ctx.get("cargo_objetivo", ""),
-        "empresa": ctx.get("empresa", ""),
-        "score_idoneidad": ctx.get("score_idoneidad"),
-        "keywords_faltantes": ctx.get("keywords_faltantes", []),
-        "keywords_coincidentes": ctx.get("keywords_coincidentes", []),
-        "keywords_ats": ctx.get("keywords_ats", []),
-    }
-    historial = cargar_historial()
-    historial.append(entrada)
-    historial = historial[-HISTORIAL_MAX:]
-    try:
-        HISTORIAL_PATH.write_text(
-            json.dumps(historial, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-        log.info(f"historial: guardada entrada ({len(historial)}/{HISTORIAL_MAX}).")
-    except Exception as e:
-        log.warning(f"historial: no pude escribir {HISTORIAL_PATH.name}: {e}")
-
-
-def top_keywords_faltantes(historial: list[dict] | None = None) -> list[dict]:
-    """Cuenta cuantas veces aparece cada keyword faltante en el historial."""
-    if historial is None:
-        historial = cargar_historial()
-    conteo: dict[str, dict] = {}
-    for e in historial:
-        for kw in e.get("keywords_faltantes", []):
-            clave = (kw or "").strip().lower()
-            if not clave:
-                continue
-            if clave not in conteo:
-                conteo[clave] = {"keyword": kw.strip(), "veces": 0}
-            conteo[clave]["veces"] += 1
-    return sorted(conteo.values(), key=lambda x: x["veces"], reverse=True)
-
-# ──────────────────────────────────────────────────────────────────
-# PROPUESTA DE PERFIL (extraida de PDF, pendiente de aprobacion)
-# ──────────────────────────────────────────────────────────────────
-PROPUESTA_PATH = Path(__file__).parent / "perfil_propuesto.json"
-BACKUPS_DIR = Path(__file__).parent / "perfil_backups"
-BACKUPS_DIR.mkdir(exist_ok=True)
-
-
-def cargar_contexto_disco() -> dict | None:
-    global _CONTEXTO
-    if CONTEXTO_PATH.exists():
-        try:
-            _CONTEXTO = json.loads(CONTEXTO_PATH.read_text(encoding="utf-8"))
-            return _CONTEXTO
-        except Exception:
-            return None
-    return None
-
-
-cargar_contexto_disco()
-
-
-# ──────────────────────────────────────────────────────────────────
-# GESTION DE API KEYS EN .env
-# ──────────────────────────────────────────────────────────────────
-def _leer_env_actual() -> dict[str, str]:
-    """Lee el .env actual a un dict. Si no existe, devuelve {}."""
-    if not ENV_PATH.exists():
-        return {}
-    datos: dict[str, str] = {}
-    for linea in ENV_PATH.read_text(encoding="utf-8").splitlines():
-        s = linea.strip()
-        if not s or s.startswith("#") or "=" not in s:
-            continue
-        clave, _, valor = s.partition("=")
-        datos[clave.strip()] = valor.strip().strip('"').strip("'")
-    return datos
-
-
-def _escribir_env(datos: dict[str, str]) -> None:
-    """Reescribe el .env con las claves dadas. Sobrescribe el archivo."""
-    lineas = [
-        "# Generado por /configurar_keys desde la extension.",
-        "# No se sube a git (esta en .gitignore).",
-        "",
-    ]
-    for k, v in datos.items():
-        lineas.append(f"{k}={v}")
-    ENV_PATH.write_text("\n".join(lineas) + "\n", encoding="utf-8")
-
-
-# ──────────────────────────────────────────────────────────────────
-# RESPUESTAS DIRECTAS (no gastan tokens — vienen del perfil)
-# ──────────────────────────────────────────────────────────────────
-def respuesta_directa(pregunta: str) -> str | None:
-    t = pregunta.lower()
-    extra = PERFIL.get("respuestas_extra", {})
-    if any(p in t for p in ["renta", "sueldo", "pretension", "expectativa salar", "salario"]):
-        return PERFIL.get("expectativa_sueldo") or None
-    if any(p in t for p in ["disponibilidad", "disponible para empezar"]):
-        return PERFIL.get("disponibilidad") or None
-    # Combinado telefono+correo: cuando UN solo campo pide ambos datos.
-    # Tiene que ir ANTES de los matches individuales para tomar prioridad.
-    if any(
-        p in t
-        for p in [
-            "datos de contacto", "informacion de contacto", "información de contacto",
-            "numero y correo", "número y correo", "numero y email", "número y email",
-            "telefono y correo", "teléfono y correo", "telefono y email", "teléfono y email",
-            "celular y correo", "celular y email", "fono y correo",
-            "contacto personal", "datos personales y de contacto",
-        ]
-    ):
-        tel = PERFIL.get("telefono") or ""
-        em = PERFIL.get("email") or ""
-        if tel and em:
-            return f"{tel} / {em}"
-        return tel or em or None
-    if any(
-        p in t
-        for p in [
-            "telefono", "teléfono", "celular", "fono", "movil", "móvil",
-            "whatsapp", "numero de contacto", "número de contacto",
-            "numero telef", "número telef", "n° telef", "no. telef",
-            "contacto telef",
-        ]
-    ):
-        return PERFIL.get("telefono") or None
-    if any(p in t for p in ["correo", "email", "e-mail", "mail "]):
-        return PERFIL.get("email") or None
-    if "comuna" in t:
-        return PERFIL.get("comuna") or None
-    if any(p in t for p in ["ciudad", "ubicacion", "ubicación", "donde vive", "donde resides", "lugar de residencia"]):
-        return PERFIL.get("ciudad") or None
-    # Eliminado: matching automatico de "edad" causaba falsos positivos en
-    # campos de experiencia / necesidad / etc. que contenian la subcadena.
-    if any(p in t for p in ["nombre completo", "nombre y apellido", "tu nombre", "nombres y apellidos"]):
-        return PERFIL.get("nombre") or None
-    if any(p in t for p in ["licencia", "conducir"]):
-        return extra.get("licencia_conducir") or None
-    if any(p in t for p in ["nacionalidad", "pais de origen", "país de origen"]):
-        return PERFIL.get("nacionalidad") or None
-    if any(p in t for p in ["residencia", "permiso de trabaj", "visa"]):
-        return extra.get("residencia_legal") or None
-    # Redes y portafolio
-    redes = PERFIL.get("redes") or {}
-    if "linkedin" in t:
-        return redes.get("linkedin") or None
-    if any(p in t for p in ["behance", "dribbble"]):
-        return redes.get("behance") or None
-    if any(p in t for p in ["portafolio", "portfolio", "sitio web", "pagina web", "página web", "página personal", "pagina personal", "sitio personal", "website", "web personal"]):
-        return redes.get("portafolio_web") or None
-    return None
-
-
-# ──────────────────────────────────────────────────────────────────
-# RESPUESTA IA (preguntas abiertas)
-# ──────────────────────────────────────────────────────────────────
-def _bloque_campo(campo: "Campo") -> str:
-    """Bloque con TODA la informacion del campo para que la IA identifique
-    inequivocamente que se le pregunta y no caiga en alucinaciones."""
-    m = campo.meta
-    if m is None:
-        return f"- Label: {campo.label}\n"
-    pares = [
-        ("Label visible", m.label or campo.label),
-        ("Placeholder", m.placeholder),
-        ("Name (atributo HTML)", m.name),
-        ("Id (atributo HTML)", m.id),
-        ("Aria-label", m.aria_label),
-        ("Aria-describedby (texto)", m.aria_describedby_texto),
-        ("Legend del fieldset", m.legend),
-        ("Texto cercano (hermanos)", m.hermanos),
-        ("Tipo de input", m.tipo_input),
-    ]
-    lineas = [f"- {k}: {v}" for k, v in pares if v]
-    return "\n".join(lineas) + "\n"
-
-
-def respuesta_ia_para_pregunta(campo: "Campo", titulo_contexto: str = "", imagen_bytes: bytes | None = None) -> str:
-    perfil_json = json.dumps(PERFIL, ensure_ascii=False)
-    nombre = PERFIL.get("nombre", "el candidato")
-    empresa_cargo = "; ".join(
-        f"{e.get('empresa', '?')} = {e.get('cargo', '?')}"
-        for e in PERFIL.get("experiencia", [])
-    ) or "(sin experiencia registrada)"
-
-    ctx = _CONTEXTO or {}
-    if ctx:
-        bloque_ctx = (
-            "\nANALISIS DE LA OFERTA (referencia para responder preguntas sobre experiencia o motivacion):\n"
-            f"- Cargo/tema objetivo: {ctx.get('cargo_objetivo', titulo_contexto)}\n"
-            f"- Empresa o entidad: {ctx.get('empresa', '')}\n"
-            f"- Que busca la oferta: {ctx.get('resumen_pedido', '')}\n"
-            f"- Experiencia requerida: {ctx.get('experiencia_requerida', '')}\n"
-            f"- Nivel: {ctx.get('nivel_seniority', '')}\n"
-            f"- Habilidades duras pedidas: {', '.join(ctx.get('habilidades_duras', []))}\n"
-            f"- Habilidades blandas pedidas: {', '.join(ctx.get('habilidades_blandas', []))}\n"
-            f"- Keywords del perfil que coinciden: {', '.join(ctx.get('keywords_coincidentes', []))}\n"
-            f"- Keywords pedidas que no estan en el perfil: {', '.join(ctx.get('keywords_faltantes', []))}\n"
-        )
-    else:
-        bloque_ctx = ""
-
-    bloque_campo = _bloque_campo(campo)
-    pregunta = campo.label
-
-    bloque_vision = (
-        "\nTIENES UNA CAPTURA DE PANTALLA del formulario adjunta. Antes de responder:\n"
-        "1. Localiza visualmente el campo descrito abajo en la imagen (usa label, placeholder, name, id).\n"
-        "2. Lee el texto VISIBLE alrededor de ese campo (la pregunta real, no solo el HTML).\n"
-        "3. Confirma que tu interpretacion de la pregunta concuerda con lo que se ve. Si el texto en la imagen contradice los atributos HTML, prefiere lo que se ve en la imagen.\n"
-        "4. Solo entonces responde.\n"
-        if imagen_bytes
-        else ""
-    )
-
-    prompt = (
-        f"Eres {nombre} completando un formulario web"
-        + (f" para postular al cargo \"{titulo_contexto}\"" if titulo_contexto else "")
-        + ".\n\n"
-        f"PERFIL OFICIAL (tu UNICA fuente de verdad, NO existe nada fuera de esto):\n{perfil_json}\n\n"
-        f"MAPEO empresa => cargo real (NUNCA mezclar):\n{empresa_cargo}\n"
-        f"{bloque_ctx}"
-        f"{bloque_vision}\n"
-        "DATOS DEL CAMPO QUE DEBES RESPONDER (lee TODOS antes de responder; si\n"
-        "el label es ambiguo, los demas atributos aclaran que se pregunta):\n"
-        f"{bloque_campo}\n"
-        "REGLAS ABSOLUTAS (violarlas es peor que no responder):\n"
-        "1. PROHIBIDO inventar empresas, cargos, fechas, estudios, habilidades o cualquier dato que no este textualmente en el PERFIL OFICIAL.\n"
-        "2. Si mencionas una empresa del perfil, el cargo que le asocies DEBE ser exactamente el que aparece en el MAPEO de arriba. NUNCA mezcles el cargo de una empresa con tareas de otra. NUNCA combines en una misma frase logros de empresas distintas como si fueran una sola.\n"
-        "3. Identifica primero QUE pide el campo. Si pregunta por datos personales (nombre, telefono, correo, edad, ciudad, comuna, disponibilidad, sueldo, nacionalidad, residencia, licencia), IGNORA por completo el ANALISIS del contexto y responde SOLO con el dato del PERFIL OFICIAL. El contexto solo aplica a preguntas sobre experiencia, motivacion, encaje con el cargo, o similares.\n"
-        "4. Si la pregunta es sobre experiencia, motivacion o encaje con el cargo: elige la experiencia del perfil mas relevante para el cargo_objetivo de la oferta. Si tienes varias experiencias relevantes, prioriza primero las de mas anos / mas senior, luego las mas recientes. Menciona SOLO una o dos experiencias, no listes todas.\n"
-        "5. SIEMPRE que sea natural, INCLUYE 1-3 keywords coincidentes (de habilidades_duras o blandas de la oferta que TAMBIEN aparezcan en tu perfil). Usa los terminos LITERALES de la oferta — eso ayuda a pasar el filtro ATS. NO inventes habilidades que no estan en tu perfil solo porque la oferta las pide.\n"
-        "6. Si nada en el perfil aplica directamente, di honestamente: \"No tengo experiencia directa en X, pero mi experiencia en Y como [cargo real] es transferible porque...\".\n"
-        "7. Maximo 3 oraciones Y maximo 450 caracteres totales. Muchos sitios (Indeed) rechazan respuestas mas largas de 500 caracteres. Se conciso. Primera persona, profesional. PROHIBIDO empezar con: \"Claro\", \"Por supuesto\", \"Con gusto\", \"Como [profesion]\", o cualquier muletilla introductoria. Sin saludos ni firmas.\n\n"
-        f"Pregunta principal del campo: {pregunta}\n\n"
-        "Responde SOLO con la respuesta directa (sin comillas, sin etiquetas, sin explicar por que respondes asi)."
-    )
-    fallback = PERFIL.get("respuestas_extra", {}).get(
-        "por_que_este_cargo",
-        "Cuento con la experiencia y disponibilidad descritas en mi perfil.",
-    )
-    if imagen_bytes:
-        return IA.vision(prompt, imagen_bytes, fallback=fallback)
-    return IA.chat(prompt, fallback=fallback, max_tokens=250)
-
-
-# ──────────────────────────────────────────────────────────────────
-# ANALISIS DE CONTEXTO (opcional)
-# ──────────────────────────────────────────────────────────────────
-def analizar_contexto_logic(titulo: str, descripcion: str, imagen_bytes: bytes | None = None) -> dict:
-    global _CONTEXTO
-    # Limpieza incondicional: cada "Analizar" parte de cero, asi el usuario
-    # no tiene que apretar "Olvidar contexto" antes de cambiar de oferta.
-    _CONTEXTO = None
-    try:
-        if CONTEXTO_PATH.exists():
-            CONTEXTO_PATH.unlink()
-    except Exception as e:
-        log.warning(f"analizar_contexto: no pude borrar {CONTEXTO_PATH.name}: {e}")
-
-    if not titulo and not descripcion and not imagen_bytes:
-        return {}
-
-    perfil_json = json.dumps(PERFIL, ensure_ascii=False)
-
-    bloque_vision = (
-        "\nTIENES UNA CAPTURA DE PANTALLA del navegador del usuario adjunta.\n"
-        "Reglas para usar la imagen:\n"
-        "1. Si hay un MODAL/DIALOG/POPUP abierto al frente (lightbox con la oferta abierta), enfocate SOLO en su contenido. Ignora el listado o sidebar de busqueda que este detras.\n"
-        "2. Si el texto adjunto incluye 'X.XXX ofertas' u otros indicadores de pagina de busqueda PERO la imagen muestra UNA oferta concreta abierta, confia en la imagen: NO es generica.\n"
-        "3. Si texto e imagen estan en conflicto, prefiere la imagen para identificar cual es la oferta visible.\n"
-        "4. El texto adjunto se queda como respaldo: usa la imagen para identificar el contexto, y el texto para detalles que la imagen no muestra (descripcion completa, requisitos, etc.).\n"
-        if imagen_bytes
-        else ""
-    )
-
-    prompt = (
-        "Eres un analizador ATS senior. Tu trabajo es DISECCIONAR una oferta"
-        " de empleo y separar lo que un reclutador realmente evalua (skills,"
-        " experiencia, nivel) del ruido logistico (jornada, horario, sueldo,"
-        " ubicacion, beneficios).\n\n"
-        " Devuelve SOLO JSON valido (sin texto extra, sin ```).\n\n"
-        f"{bloque_vision}"
-        f"TEXTO DE LA OFERTA:\nTitulo: {titulo}\nDescripcion: {descripcion[:6000]}\n\n"
-        f"PERFIL COMPLETO DEL CANDIDATO:\n{perfil_json}\n\n"
-        "Devuelve este JSON exacto (todas las claves obligatorias):\n"
-        "{\n"
-        '  "cargo_objetivo": "titulo del cargo segun la oferta",\n'
-        '  "empresa": "empresa o entidad que publica (vacio si no aplica)",\n'
-        '  "resumen_pedido": "1-2 oraciones, SOLO sobre el rol y responsabilidades. NO menciones jornada/horario/sueldo.",\n'
-        '  "experiencia_requerida": "anos minimos y/o tipo de experiencia que pide la oferta. Ejemplo: \'3+ anos en ventas B2B\' o \'experiencia previa en cadena de frio\'. Vacio si no se menciona.",\n'
-        '  "nivel_seniority": "junior | semi-senior | senior | sin especificar",\n'
-        '  "habilidades_duras": ["lista de skills tecnicas / conocimientos especificos / herramientas / certificaciones que la oferta pide. Ej: \'Salesforce CRM\', \'Excel intermedio\', \'manejo de cadena de frio\', \'ingles B2\'"],\n'
-        '  "habilidades_blandas": ["SOLO las que la oferta menciona explicitamente. Ej: \'orientacion al cliente\', \'trabajo bajo presion\', \'liderazgo\'. NO inventes."],\n'
-        '  "keywords_ats": ["union de habilidades_duras + blandas + experiencia + nivel. SIN ruido logistico (jornada, horario, sueldo, ubicacion, contrato, beneficios). 10-15 terminos."],\n'
-        '  "keywords_coincidentes": ["keywords del perfil que aparecen en la oferta (cualquiera de las 3 categorias)"],\n'
-        '  "keywords_faltantes": ["keywords de la oferta que NO estan en el perfil"],\n'
-        '  "score_idoneidad": 0-100,\n'
-        '  "justificacion": "2-3 oraciones: que pesa a favor y que pesa en contra. Honesto, no inflado."\n'
-        "}\n\n"
-        "REGLAS DE EXTRACCION (criticas):\n"
-        "- Distingue DURAS de BLANDAS. Duras = se aprenden y se demuestran (herramienta, idioma, certificacion, conocimiento de sector). Blandas = rasgos personales (comunicacion, liderazgo, proactividad).\n"
-        "- NO incluyas en NINGUNA categoria: jornada (full-time, part-time, turnos), horario, sueldo, beneficios, ubicacion, tipo de contrato, modalidad (remoto/presencial). Eso es metadata, no skills.\n"
-        "- Si una habilidad blanda no esta escrita EN LA OFERTA, NO la inventes (aunque sea obvia para el rol).\n"
-        "- Si la oferta es CORTA pero concreta (cargo claro + alguna descripcion), igual extrae lo que puedas. Una oferta corta NO es generica.\n"
-        "- Solo marca generica (score=0, justificacion='es un listado, no una oferta unica') si el texto es realmente una PAGINA DE BUSQUEDA con multiples ofertas distintas listadas, o un aviso vacio sin descripcion del rol.\n\n"
-        "CRITERIOS PARA EL SCORE (0-100):\n"
-        "- 90-100: encaja casi perfecto (mayoria de habilidades_duras + experiencia + anos).\n"
-        "- 70-89: encaja bien. Falta 1-2 cosas no criticas o tiene experiencia transferible solida.\n"
-        "- 50-69: encaja parcialmente. Faltan habilidades clave o menos experiencia de la pedida pero hay base.\n"
-        "- 30-49: encaja poco. Faltan varias habilidades duras o la experiencia es de otro sector.\n"
-        "- 0-29: no encaja. Cambio total de carrera o sin habilidades duras requeridas.\n"
-    )
-
-    if imagen_bytes and IA.vision_disponible():
-        log.info(f"analizar_contexto: usando VISION ({len(imagen_bytes)//1024} KB)")
-        raw = IA.vision(prompt, imagen_bytes, fallback="{}")
-    else:
-        raw = IA.chat(prompt, fallback="{}", max_tokens=1200)
-    raw = (raw or "").strip()
-    if raw.startswith("```"):
-        raw = raw.strip("`")
-        if raw.lower().startswith("json"):
-            raw = raw[4:].strip()
-
-    try:
-        ctx = json.loads(raw)
-    except Exception as e:
-        log.warning(f"analizar_contexto: JSON invalido ({e}). Uso fallback minimo.")
-        ctx = {
-            "cargo_objetivo": titulo,
-            "empresa": "",
-            "resumen_pedido": descripcion[:300],
-            "experiencia_requerida": "",
-            "nivel_seniority": "sin especificar",
-            "habilidades_duras": [],
-            "habilidades_blandas": [],
-            "keywords_ats": [],
-            "keywords_coincidentes": [],
-            "keywords_faltantes": [],
-            "score_idoneidad": 0,
-            "justificacion": "No pude analizar la oferta.",
-        }
-
-    _CONTEXTO = ctx
-    try:
-        CONTEXTO_PATH.write_text(json.dumps(ctx, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception as e:
-        log.warning(f"analizar_contexto: no pude escribir {CONTEXTO_PATH.name}: {e}")
-    guardar_en_historial(ctx)
-    return ctx
-
-
-# ──────────────────────────────────────────────────────────────────
-# EXTRACCION DE PDF + PROPUESTA DE PERFIL
-# ──────────────────────────────────────────────────────────────────
-def extraer_texto_pdf(pdf_bytes: bytes) -> str:
-    """Extrae texto de un PDF (no funciona con PDFs escaneados sin OCR)."""
-    reader = PdfReader(io.BytesIO(pdf_bytes))
-    partes = []
-    for i, page in enumerate(reader.pages):
-        try:
-            t = page.extract_text() or ""
-            if t.strip():
-                partes.append(t)
-        except Exception as e:
-            log.warning(f"PDF: error extrayendo pagina {i}: {e}")
-    return "\n".join(partes).strip()
-
-
-def proponer_perfil_desde_texto(texto: str) -> dict:
-    """
-    Pide a la IA que extraiga TODOS los campos del perfil presentes en `texto`.
-    Comportamiento: el JSON devuelto reemplaza por completo al perfil actual.
-    Lo que no aparezca en el texto queda vacio en el nuevo perfil.
-    """
-    schema_json = json.dumps(SCHEMA_EJEMPLO, ensure_ascii=False, indent=2)
-    prompt = (
-        "Eres un extractor estructurado de datos de CVs. Lee el TEXTO de"
-        " abajo (extraido de un PDF) y devuelve UN JSON con TODOS los campos"
-        " del perfil que aparezcan en el texto. Este JSON va a REEMPLAZAR"
-        " por completo el perfil actual del usuario, asi que extrae todo lo"
-        " que puedas del CV.\n\n"
-        "ESQUEMA DE PERFIL OBJETIVO. Los valores que ves abajo son SOLO"
-        " EJEMPLOS de formato: copia EXACTAMENTE las CLAVES y los TIPOS,"
-        " pero los VALORES los sacas del TEXTO del CV (nunca del ejemplo)."
-        " NO inventes claves nuevas ni renombres las existentes (p.ej. usa"
-        " 'cargo', no 'puesto'; idiomas son objetos {idioma, nivel}, no"
-        " strings):\n"
-        f"{schema_json}\n\n"
-        "TEXTO DEL DOCUMENTO:\n"
-        f"{texto[:8000]}\n\n"
-        "REGLAS ABSOLUTAS:\n"
-        "1. PROHIBIDO inventar datos. Si un dato no aparece textualmente en"
-        " el texto, OMITE esa clave del JSON (o ponla como \"\" / [] / null"
-        " segun el tipo). NO copies valores del ESQUEMA EJEMPLO ni datos de"
-        " ningun perfil previo: solo existe lo que este en el TEXTO.\n"
-        "2. Respeta los tipos y las CLAVES del esquema literalmente. Si el"
-        " esquema tiene {cargo, empresa}, NO devuelvas {puesto, compania}."
-        " Si idiomas es [{idioma, nivel}], NO devuelvas strings sueltos.\n"
-        "3. Para arrays (experiencia, estudios, habilidades, etc): SOLO"
-        " incluye los items que aparezcan en el texto. El resultado"
-        " reemplaza la lista entera; no se preservan items previos.\n"
-        "4. Para respuestas_extra (objeto con preguntas comunes): incluye"
-        " SOLO las claves cuyas respuestas se puedan inferir directamente"
-        " del texto.\n"
-        "5. Devuelve SOLO JSON valido. Sin texto extra, sin comentarios, sin"
-        " ```. Empieza con { y termina con }.\n"
-    )
-    raw = IA.chat(prompt, fallback="{}", max_tokens=4000)
-    raw = (raw or "").strip()
-    if raw.startswith("```"):
-        raw = raw.strip("`")
-        if raw.lower().startswith("json"):
-            raw = raw[4:].strip()
-    try:
-        return json.loads(raw)
-    except Exception as e:
-        log.warning(f"proponer_perfil: JSON invalido ({e}). Raw: {raw[:200]}")
-        return {}
-
-
-def cargar_propuesta_disco() -> dict | None:
-    if PROPUESTA_PATH.exists():
-        try:
-            return json.loads(PROPUESTA_PATH.read_text(encoding="utf-8"))
-        except Exception:
-            return None
-    return None
-
-
-def guardar_propuesta_disco(propuesta: dict) -> None:
-    PROPUESTA_PATH.write_text(
-        json.dumps(propuesta, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-
-
-def backup_perfil_actual() -> Path:
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    dst = BACKUPS_DIR / f"perfil_{ts}.json"
-    shutil.copy2(PERFIL_PATH, dst)
-    return dst
-
 
 # ──────────────────────────────────────────────────────────────────
 # API
@@ -617,156 +85,9 @@ app.add_middleware(
 )
 
 
-class AnalizarRequest(BaseModel):
-    titulo: str = ""
-    descripcion: str = ""
-    imagen_base64: str = ""
-
-
-class CampoMeta(BaseModel):
-    label: str = ""
-    placeholder: str = ""
-    name: str = ""
-    id: str = ""
-    aria_label: str = ""
-    aria_describedby_texto: str = ""
-    legend: str = ""
-    hermanos: str = ""
-    tipo_input: str = ""
-
-
-class Campo(BaseModel):
-    id: str
-    tipo: str  # text | textarea | radio | checkbox | select
-    label: str
-    opciones: list[str] | None = None
-    meta: CampoMeta | None = None
-
-
-class RellenarRequest(BaseModel):
-    titulo_contexto: str = ""
-    campos: list[Campo]
-    usar_directas: bool = True
-    imagen_base64: str = ""
-
-
-class Respuesta(BaseModel):
-    id: str
-    tipo: str
-    valor: str
-
-
-class RellenarResponse(BaseModel):
-    respuestas: list[Respuesta]
-
-
-class ConfigurarKeysRequest(BaseModel):
-    gemini_api_key: str = ""
-    groq_api_key: str = ""
-
-
-def _texto_completo_campo(campo: Campo) -> str:
-    """Concatena todos los atributos textuales del campo. Sirve para que
-    respuesta_directa() pueda matchear aunque el label visible sea pobre."""
-    partes = [campo.label]
-    m = campo.meta
-    if m is not None:
-        partes.extend([
-            m.placeholder, m.name, m.id, m.aria_label,
-            m.aria_describedby_texto, m.legend,
-        ])
-    return " | ".join(p for p in partes if p)
-
-
-def rellenar_campo(campo: Campo, titulo_contexto: str, usar_directas: bool, imagen_bytes: bytes | None = None) -> Respuesta:
-    tipo = campo.tipo
-    pregunta = campo.label
-    texto_match = _texto_completo_campo(campo)
-
-    if tipo in ("text", "textarea"):
-        resp = (respuesta_directa(texto_match) if usar_directas else None)
-        if resp is None:
-            resp = respuesta_ia_para_pregunta(campo, titulo_contexto, imagen_bytes=imagen_bytes)
-            if tipo == "text" and resp and len(resp) > 150:
-                resp = resp.split(".")[0][:150]
-            elif tipo == "textarea" and resp and len(resp) > 480:
-                # Cap duro a ~480 chars para no romper validaciones tipo
-                # Indeed (limite tipico 500). Corta en el ultimo punto.
-                corte = resp[:480]
-                ultimo_punto = corte.rfind(".")
-                if ultimo_punto > 200:
-                    resp = corte[: ultimo_punto + 1]
-                else:
-                    resp = corte.rstrip() + "..."
-        return Respuesta(id=campo.id, tipo=tipo, valor=resp or "")
-
-    if tipo == "radio":
-        opciones = campo.opciones or []
-        if not opciones:
-            return Respuesta(id=campo.id, tipo=tipo, valor="")
-        respuesta_pref = respuesta_directa(texto_match) if usar_directas else None
-        if respuesta_pref:
-            for o in opciones:
-                if respuesta_pref.lower() in o.lower() or o.lower() in respuesta_pref.lower():
-                    return Respuesta(id=campo.id, tipo=tipo, valor=o)
-            return Respuesta(id=campo.id, tipo=tipo, valor=opciones[0])
-        if len(opciones) <= 2:
-            es_si = IA.si_no(
-                f"Perfil: {PERFIL_RESUMIDO[:200]}\n\nPregunta: {pregunta}\n"
-                "Responde SOLO SI o NO segun el perfil.",
-                default=True,
-            )
-            for o in opciones:
-                tl = o.lower()
-                if es_si and any(p in tl for p in ["sí", "si", "yes", "1", "true"]):
-                    return Respuesta(id=campo.id, tipo=tipo, valor=o)
-                if not es_si and any(p in tl for p in ["no", "0", "false"]):
-                    return Respuesta(id=campo.id, tipo=tipo, valor=o)
-            return Respuesta(id=campo.id, tipo=tipo, valor=opciones[0])
-        eleccion = IA.elegir(pregunta, opciones, contexto=f"Candidato: {PERFIL_RESUMIDO[:200]}")
-        return Respuesta(id=campo.id, tipo=tipo, valor=eleccion)
-
-    if tipo == "select":
-        opciones = campo.opciones or []
-        if not opciones:
-            return Respuesta(id=campo.id, tipo=tipo, valor="")
-        respuesta_pref = respuesta_directa(texto_match) if usar_directas else None
-        if respuesta_pref:
-            for o in opciones:
-                if respuesta_pref.lower() in o.lower() or o.lower() in respuesta_pref.lower():
-                    return Respuesta(id=campo.id, tipo=tipo, valor=o)
-        eleccion = IA.elegir(pregunta, opciones, contexto=f"Candidato: {PERFIL_RESUMIDO[:200]}")
-        return Respuesta(id=campo.id, tipo=tipo, valor=eleccion)
-
-    if tipo == "checkbox":
-        label_l = pregunta.lower()
-        # 1) Checkboxes legales / aceptaciones se marcan siempre que existan
-        if any(p in label_l for p in ["acept", "terminos", "privacid", "consenti", "autorizo", "declaro"]):
-            return Respuesta(id=campo.id, tipo=tipo, valor="true")
-        # 2) Si la respuesta directa del perfil cubre el campo, usar eso
-        respuesta_pref = respuesta_directa(texto_match) if usar_directas else None
-        if respuesta_pref:
-            val = respuesta_pref.strip().lower()
-            es_negativo = val in ("no", "false", "0") or val.startswith("no ")
-            return Respuesta(
-                id=campo.id, tipo=tipo, valor="false" if es_negativo else "true"
-            )
-        # 3) Pregunta a la IA si la afirmacion del checkbox aplica al perfil
-        es_si = IA.si_no(
-            f"Perfil: {PERFIL_RESUMIDO[:300]}\n\n"
-            f"La pregunta del checkbox es: '{pregunta}'\n"
-            "Si la afirmacion es verdadera segun el perfil, responde SI. "
-            "Si es falsa o no se puede deducir, responde NO.",
-            default=False,
-        )
-        return Respuesta(id=campo.id, tipo=tipo, valor="true" if es_si else "false")
-
-    return Respuesta(id=campo.id, tipo=tipo, valor="")
-
-
 @app.get("/ping")
 def ping():
-    ctx = _CONTEXTO or {}
+    ctx = perfil_store.get_contexto() or {}
     estado_ia = IA.estado()
     return {
         "ok": True,
@@ -777,10 +98,10 @@ def ping():
         "justificacion": ctx.get("justificacion", ""),
         "keywords_coincidentes": ctx.get("keywords_coincidentes", []),
         "keywords_faltantes": ctx.get("keywords_faltantes", []),
-        "propuesta_pendiente": PROPUESTA_PATH.exists(),
-        "keys_configuradas": estado_ia["gemini_configurado"] or estado_ia["groq_configurado"],
+        "propuesta_pendiente": perfil_store.PROPUESTA_PATH.exists(),
+        "keys_configuradas": estado_ia["deepseek_configurado"],
         "ia_disponible": estado_ia["alguno_disponible"],
-        "historial_total": len(cargar_historial()),
+        "historial_total": len(perfil_store.cargar_historial()),
     }
 
 
@@ -793,26 +114,36 @@ def estado_keys():
 
 @app.post("/configurar_keys")
 def configurar_keys(req: ConfigurarKeysRequest):
-    """Recibe las API keys de la extension, las escribe al .env y recarga
-    los clientes IA. Si solo se manda una, la otra se preserva."""
-    gemini = (req.gemini_api_key or "").strip()
-    groq = (req.groq_api_key or "").strip()
+    """Recibe las API keys desde la extension, las escribe al .env y reinicia
+    los clientes IA.
+    - deepseek_api_key: DeepSeek para texto (obligatoria).
+    - gemini_api_key: Gemini para vision (opcional, pero muy recomendada).
+    Compatible con nombres viejos (groq_api_key) para no romper la extension."""
+    dk = (req.deepseek_api_key or "").strip()
+    gk = (req.gemini_api_key or "").strip()
+    if not dk and not gk:
+        # Retrocompat: si solo mandan gemini_api_key (antes era el unico campo)
+        dk = dk or (req.groq_api_key or "").strip()
 
-    if not gemini and not groq:
-        raise HTTPException(status_code=400, detail="Debes enviar al menos una API key.")
+    if not dk:
+        raise HTTPException(status_code=400, detail="Debes enviar al menos la API key de DeepSeek.")
 
-    actual = _leer_env_actual()
-    if gemini:
-        actual["GEMINI_API_KEY"] = gemini
-    if groq:
-        actual["GROQ_API_KEY"] = groq
+    actual = perfil_store.leer_env_actual()
+    actual["DEEPSEEK_API_KEY"] = dk
+    if gk:
+        actual["GEMINI_API_KEY"] = gk
+    elif "GEMINI_API_KEY" in actual:
+        # Si no mandaron gemini key pero ya existia, la conservamos
+        pass
+    # Limpia keys viejas de proveedores eliminados
+    actual.pop("GROQ_API_KEY", None)
 
     try:
-        _escribir_env(actual)
+        perfil_store.escribir_env(actual)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"No pude escribir el .env: {e}")
 
-    log.info(f"/configurar_keys: gemini={'sí' if gemini else 'no'}, groq={'sí' if groq else 'no'}")
+    log.info(f"/configurar_keys: deepseek_key={'si' if dk else 'no'}, gemini_key={'si' if gk else 'no'}")
     estado = reload_ia()
     return {"ok": True, **estado}
 
@@ -820,13 +151,12 @@ def configurar_keys(req: ConfigurarKeysRequest):
 # ─── Perfil + propuesta de perfil desde PDF ───────────────────────
 @app.get("/perfil_actual")
 def perfil_actual():
-    with open(PERFIL_PATH, encoding="utf-8") as f:
-        return json.load(f)
+    return perfil_store.get_perfil()
 
 
 @app.get("/perfil_propuesto")
 def perfil_propuesto():
-    propuesta = cargar_propuesta_disco()
+    propuesta = perfil_store.cargar_propuesta_disco()
     if propuesta is None:
         raise HTTPException(status_code=404, detail="No hay propuesta pendiente")
     return propuesta
@@ -861,137 +191,52 @@ async def proponer_perfil(pdf: UploadFile = File(...)):
     if not propuesto:
         raise HTTPException(status_code=500, detail="La IA no devolvio JSON valido")
 
-    guardar_propuesta_disco(propuesto)
-    log.info(f"  Propuesta guardada en {PROPUESTA_PATH.name}")
+    perfil_store.guardar_propuesta_disco(propuesto)
+    log.info(f"  Propuesta guardada en {perfil_store.PROPUESTA_PATH.name}")
 
     return {
         "ok": True,
-        "actual": PERFIL,
+        "actual": perfil_store.get_perfil(),
         "propuesto": propuesto,
         "campos_detectados": list(propuesto.keys()),
     }
 
 
-class AplicarPerfilRequest(BaseModel):
-    perfil: dict
-
-
 @app.post("/aplicar_perfil")
 def aplicar_perfil(req: AplicarPerfilRequest):
-    global PERFIL, PERFIL_RESUMIDO
     if not req.perfil or not isinstance(req.perfil, dict):
         raise HTTPException(status_code=400, detail="Perfil invalido")
 
-    backup_path = backup_perfil_actual()
+    backup_path = perfil_store.guardar_perfil(req.perfil)
     log.info(f"/aplicar_perfil: backup en {backup_path.name}")
 
-    PERFIL_PATH.write_text(
-        json.dumps(req.perfil, ensure_ascii=False, indent=4),
-        encoding="utf-8",
-    )
-
-    # Recargar en memoria
-    with open(PERFIL_PATH, encoding="utf-8") as f:
-        PERFIL = json.load(f)
-    PERFIL_RESUMIDO = _construir_perfil_resumido(PERFIL)
-
-    # Limpiar propuesta
-    if PROPUESTA_PATH.exists():
-        PROPUESTA_PATH.unlink()
+    perfil_store.descartar_propuesta_disco()
 
     return {"ok": True, "backup": backup_path.name}
 
 
 @app.post("/descartar_propuesta")
 def descartar_propuesta():
-    if PROPUESTA_PATH.exists():
-        PROPUESTA_PATH.unlink()
+    perfil_store.descartar_propuesta_disco()
     return {"ok": True}
 
 
 # ─── Generar CV (reescrito con keywords del historial) ────────────
-def _exp_orden_key(exp: dict) -> tuple:
-    """Clave para ordenar experiencias de mas reciente a mas antigua.
-    Usa el periodo (texto libre): 'actualidad/presente' pesa como ano 9999."""
-    periodo = (exp.get("periodo") or "").lower()
-    anios = [int(a) for a in re.findall(r"(?:19|20)\d{2}", periodo)]
-    actual = any(w in periodo for w in ("actual", "presente", "present", "current", "hoy"))
-    fin = 9999 if actual else (max(anios) if anios else 0)
-    inicio = min(anios) if anios else 0
-    return (fin, inicio)
-
-
-def ordenar_experiencia_reciente(exps: list) -> list:
-    """Ordena las experiencias por empleo mas reciente primero (no por relevancia)."""
-    if not isinstance(exps, list):
-        return exps
-    return sorted(exps, key=_exp_orden_key, reverse=True)
-
-
-def optimizar_cv_con_ia(perfil: dict, keywords: list[str]) -> dict:
-    """Clasifica cada keyword contra el perfil (tiene / transferible / no_tiene)
-    y reescribe el CV usando SOLO las respaldadas por experiencia real. Nunca
-    inventa: las 'no_tiene' jamas entran al CV (se devuelven como brechas).
-    Devuelve los campos optimizados + la clasificacion para ser transparente.
-    Usa IA.chat (cascada Gemini -> Groq con la API key configurada por el usuario)."""
-    perfil_json = json.dumps(perfil, ensure_ascii=False)
-    prompt = (
-        "Eres a la vez un redactor experto en CVs para filtros ATS y un auditor"
-        " HONESTO de habilidades. Mentir en un CV es la peor falta posible.\n"
-        "Te doy el PERFIL real de un candidato (tu UNICA fuente de verdad) y una"
-        " lista de KEYWORDS que los reclutadores piden.\n\n"
-        f"PERFIL:\n{perfil_json}\n\n"
-        f"KEYWORDS:\n{', '.join(keywords)}\n\n"
-        "PASO 1 — CLASIFICA cada keyword comparandola contra el PERFIL, en UNA categoria:\n"
-        "- \"tiene\": el perfil YA demuestra ese concepto, aunque este escrito con otras palabras. Ej: perfil dice 'gestion de redes sociales' y la keyword es 'community management'.\n"
-        "- \"transferible\": el perfil NO lo tiene literal, pero SI tiene algo cercano de la misma familia. Ej: keyword 'Salesforce' y el perfil tiene experiencia en otro CRM.\n"
-        "- \"no_tiene\": el perfil no muestra NADA que respalde la keyword. No hay base real.\n"
-        "Se ESTRICTO: ante la duda entre 'tiene' y 'transferible', elige 'transferible'; entre 'transferible' y 'no_tiene', elige 'no_tiene'. Es peor mentir que perder un punto.\n\n"
-        "PASO 2 — REESCRIBE el CV (perfil_profesional, vinetas de experiencia y habilidades) en formato Harvard:\n"
-        "- La experiencia va en VINETAS, no en parrafo. Cada vineta empieza con un VERBO DE ACCION en pasado (Lidere, Implemente, Aumente, Gestione) y, si el PERFIL lo respalda, incluye un resultado o cifra. Nunca inventes cifras.\n"
-        "- Usa LIBREMENTE los terminos de 'tiene' (son verdad, solo cambias el vocabulario al de la oferta).\n"
-        "- Para 'transferible': menciona la habilidad REAL cercana SIN afirmar el termino exacto. Ej: escribe 'experiencia en gestion de CRM y tickets', NO escribas 'Salesforce' si no lo uso.\n"
-        "- PROHIBIDO usar en CUALQUIER texto las keywords de 'no_tiene'. Nunca, ni insinuarlas.\n\n"
-        "Devuelve SOLO JSON valido (sin ```), con esta forma EXACTA:\n"
-        "{\n"
-        '  "clasificacion": {"tiene": ["..."], "transferible": ["..."], "no_tiene": ["..."]},\n'
-        '  "perfil_profesional": "resumen de 3-4 oraciones, honesto, que integre lo de tiene/transferible.",\n'
-        '  "experiencia": [{"vinetas": ["2-4 vinetas con verbo de accion + logro, usando lo que aplique a ESA experiencia"]}],\n'
-        '  "habilidades": ["habilidades reales del perfil, primero las que coinciden con la oferta. Nada de no_tiene."]\n'
-        "}\n\n"
-        "REGLAS:\n"
-        "- PROHIBIDO inventar cargos, empresas, herramientas o experiencia que no esten en el PERFIL.\n"
-        "- El array 'experiencia' debe tener el MISMO numero de items y en el MISMO orden que el perfil; solo reescribes las 'vinetas'.\n"
-        "- Cada keyword va en UNA sola categoria; la suma de las 3 listas = todas las keywords dadas.\n"
-        "- Nada de muletillas ('Soy un profesional con...'). Ve directo al valor.\n"
-    )
-    raw = (IA.chat(prompt, fallback="{}", max_tokens=2000) or "").strip()
-    if raw.startswith("```"):
-        raw = raw.strip("`")
-        if raw.lower().startswith("json"):
-            raw = raw[4:].strip()
-    try:
-        return json.loads(raw)
-    except Exception as e:
-        log.warning(f"optimizar_cv: JSON invalido ({e}). Devuelvo perfil sin optimizar.")
-        return {}
-
-
-class GenerarCVRequest(BaseModel):
-    optimizar: bool = True
-    perfil: dict | None = None  # borrador a optimizar; si es None usa el perfil guardado
-
-
 @app.post("/generar_cv")
 def generar_cv(req: GenerarCVRequest):
     # Base: el borrador que mande la pestana (con experiencia recien agregada) o,
     # si no manda nada, el perfil guardado. Siempre copia: no tocamos perfil.json.
-    base = req.perfil if isinstance(req.perfil, dict) and req.perfil else PERFIL
+    base = req.perfil if isinstance(req.perfil, dict) and req.perfil else perfil_store.get_perfil()
     cv = json.loads(json.dumps(base))
-    keywords = [k["keyword"] for k in top_keywords_faltantes()][:15]
+    # score_minimo=60: el CV es generalista (sirve para varias postulaciones
+    # del mismo rubro, no una a medida por oferta), asi que solo se cuentan
+    # keywords de ofertas donde el candidato calificaba razonablemente. Sin
+    # este filtro, buscar en rubros distintos mezcla vocabulario sin relacion.
+    keywords = [k["keyword"] for k in perfil_store.top_keywords_faltantes(score_minimo=60)][:15]
     optimizado = False
 
     clasificacion = {"tiene": [], "transferible": [], "no_tiene": []}
+    razones: dict[str, str] = {}
     if req.optimizar and keywords:
         opt = optimizar_cv_con_ia(cv, keywords)
         if opt:
@@ -1015,7 +260,21 @@ def generar_cv(req: GenerarCVRequest):
             for k in clasificacion:
                 v = cl.get(k)
                 if isinstance(v, list):
-                    clasificacion[k] = [str(x).strip() for x in v if str(x).strip()]
+                    for item in v:
+                        # Item viene como {"keyword": "...", "razon": "..."};
+                        # tambien acepta un string plano por si la IA no
+                        # sigue el schema al pie de la letra.
+                        if isinstance(item, dict):
+                            kw = str(item.get("keyword", "")).strip()
+                            razon = str(item.get("razon", "")).strip()
+                        else:
+                            kw = str(item).strip()
+                            razon = ""
+                        if not kw:
+                            continue
+                        clasificacion[k].append(kw)
+                        if razon:
+                            razones[kw] = razon
             optimizado = True
 
     # Orden cronologico: empleo mas reciente primero (no por relevancia).
@@ -1032,214 +291,16 @@ def generar_cv(req: GenerarCVRequest):
         "keywords_disponibles": keywords,
         "optimizado": optimizado,
         "clasificacion": clasificacion,
+        "razones": razones,  # por que cada keyword cayo en su categoria (aun no se muestra en el popup)
         "por_aprender": clasificacion["no_tiene"],  # nunca entran al CV
     }
-
-
-# ──────────────────────────────────────────────────────────────────
-# PDF del CV — generado en el servidor (texto real, legible por ATS)
-#
-# Antes el PDF se hacia con window.print() del navegador. Eso produce una
-# capa de texto que los lectores de CV de portales (Laborum/Bumeran) no logran
-# extraer: el archivo "sube pero queda vacio". Aqui generamos un PDF nativo con
-# fpdf2 y fuente Arial real: texto seleccionable y parseable por cualquier ATS.
-# ──────────────────────────────────────────────────────────────────
-_FONT_DIR = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts"
-
-# fpdf2 subsetea la fuente con fontTools, que loguea decenas de lineas por PDF.
-# No nos interesan: las silenciamos para no ensuciar el log del servidor.
-logging.getLogger("fontTools").setLevel(logging.WARNING)
-
-# Paleta — misma que cv.css para que el PDF se vea igual que la vista previa.
-_TINTA = (26, 26, 46)
-_GRIS = (85, 85, 85)
-_GRIS_CLARO = (136, 136, 136)
-_ACENTO = (45, 74, 124)
-_LINEA = (216, 221, 230)
-
-
-def _vinetas_de(e: dict) -> list[str]:
-    """Replica aVinetas() del front: usa e['vinetas'] o parte la descripcion."""
-    v = e.get("vinetas")
-    if isinstance(v, list) and v:
-        return [str(x).strip() for x in v if str(x).strip()]
-    desc = str(e.get("descripcion") or "").strip()
-    if not desc:
-        return []
-    partes = re.split(r"(?<=[.;])\s+", desc)
-    return [p.strip() for p in partes if len(p.strip()) > 1]
-
-
-def construir_cv_pdf(cv: dict) -> bytes:
-    """Renderiza el CV (mismo dict que muestra cv.js) a un PDF A4 de una pagina."""
-    from fpdf import FPDF
-
-    pdf = FPDF(format="A4", unit="mm")
-    pdf.set_auto_page_break(auto=True, margin=13)
-    pdf.set_margins(14, 13, 14)
-    pdf.set_title(f"CV - {cv.get('nombre', '')}".strip(" -"))
-    pdf.add_page()
-
-    # Fuente Arial real -> sin problemas de tildes/ñ ni de extraccion de texto.
-    # Si por lo que sea no esta, caemos a Helvetica (core) saneando a latin-1.
-    arial = _FONT_DIR / "arial.ttf"
-    if arial.exists():
-        pdf.add_font("CV", "", str(arial))
-        pdf.add_font("CV", "B", str(_FONT_DIR / "arialbd.ttf"))
-        pdf.add_font("CV", "I", str(_FONT_DIR / "ariali.ttf"))
-        FONT = "CV"
-        def T(s):  # noqa: E306
-            return str(s if s is not None else "")
-    else:
-        FONT = "Helvetica"
-        def T(s):  # noqa: E306
-            return str(s if s is not None else "").encode("latin-1", "replace").decode("latin-1")
-
-    left = pdf.l_margin
-    usable = pdf.w - pdf.l_margin - pdf.r_margin
-
-    def seccion(titulo: str):
-        pdf.ln(2)
-        pdf.set_font(FONT, "B", 9)
-        pdf.set_text_color(*_ACENTO)
-        pdf.cell(0, 5, T(titulo.upper()), new_x="LMARGIN", new_y="NEXT")
-        y = pdf.get_y()
-        pdf.set_draw_color(*_LINEA)
-        pdf.set_line_width(0.2)
-        pdf.line(left, y, left + usable, y)
-        pdf.ln(1.6)
-
-    # ── Encabezado: nombre + rol ──
-    pdf.set_font(FONT, "B", 20)
-    pdf.set_text_color(*_TINTA)
-    pdf.cell(0, 9, T(cv.get("nombre", "")), new_x="LMARGIN", new_y="NEXT")
-
-    rol = (cv.get("estudios") or [{}])[0].get("titulo", "") if cv.get("estudios") else ""
-    if rol:
-        pdf.set_font(FONT, "B", 11)
-        pdf.set_text_color(*_ACENTO)
-        pdf.cell(0, 6, T(rol), new_x="LMARGIN", new_y="NEXT")
-
-    # ── Linea de contacto ──
-    ubic = ", ".join(x for x in [cv.get("comuna"), cv.get("ciudad")] if x)
-    redes = cv.get("redes") or {}
-    contacto = [x for x in [
-        cv.get("telefono"),
-        cv.get("email"),
-        ubic,
-        cv.get("nacionalidad"),
-        redes.get("linkedin"),
-        redes.get("portafolio_web"),
-        redes.get("behance"),
-    ] if x]
-    if contacto:
-        pdf.ln(1)
-        pdf.set_font(FONT, "", 8.5)
-        pdf.set_text_color(*_GRIS)
-        pdf.multi_cell(usable, 4.2, T("   ·   ".join(contacto)), new_x="LMARGIN", new_y="NEXT")
-
-    # Regla bajo el contacto (acento, gruesa) — igual que el borde de cv.css.
-    y = pdf.get_y() + 0.5
-    pdf.set_draw_color(*_ACENTO)
-    pdf.set_line_width(0.5)
-    pdf.line(left, y, left + usable, y)
-    pdf.ln(3)
-
-    # ── Perfil profesional ──
-    if cv.get("perfil_profesional"):
-        seccion("Perfil profesional")
-        pdf.set_font(FONT, "", 9.5)
-        pdf.set_text_color(*_GRIS)
-        pdf.multi_cell(usable, 4.6, T(cv["perfil_profesional"]), new_x="LMARGIN", new_y="NEXT")
-
-    # ── Experiencia ──
-    exps = cv.get("experiencia") or []
-    if exps:
-        seccion("Experiencia")
-        for e in exps:
-            periodo = T(e.get("periodo", ""))
-            pdf.set_font(FONT, "", 9)
-            pw = pdf.get_string_width(periodo) + 1 if periodo else 0
-            y0 = pdf.get_y()
-            # Cargo (izq) + periodo (der) en la misma linea.
-            pdf.set_xy(left, y0)
-            pdf.set_font(FONT, "B", 10.5)
-            pdf.set_text_color(*_TINTA)
-            pdf.cell(usable - pw, 5, T(e.get("cargo", "")))
-            if periodo:
-                pdf.set_font(FONT, "", 9)
-                pdf.set_text_color(*_GRIS_CLARO)
-                pdf.set_xy(left + usable - pw, y0)
-                pdf.cell(pw, 5, periodo, align="R")
-            pdf.set_xy(left, y0 + 5)
-            # Empresa · ubicacion
-            lugar = " · ".join(x for x in [e.get("empresa"), e.get("ubicacion")] if x)
-            if lugar:
-                pdf.set_font(FONT, "B", 9.5)
-                pdf.set_text_color(*_ACENTO)
-                pdf.cell(0, 4.6, T(lugar), new_x="LMARGIN", new_y="NEXT")
-            # Viñetas con sangria francesa
-            for v in _vinetas_de(e):
-                yb = pdf.get_y()
-                pdf.set_font(FONT, "", 9.5)
-                pdf.set_text_color(*_ACENTO)
-                pdf.set_xy(left + 1, yb)
-                pdf.cell(3.5, 4.6, "-" if FONT == "Helvetica" else "•")
-                pdf.set_text_color(*_GRIS)
-                pdf.set_xy(left + 4.5, yb)
-                pdf.multi_cell(usable - 4.5, 4.6, T(v), new_x="LMARGIN", new_y="NEXT")
-            pdf.ln(2)
-
-    # ── Formación ──
-    estudios = cv.get("estudios") or []
-    if estudios:
-        seccion("Formación")
-        for s in estudios:
-            pdf.set_font(FONT, "B", 9.5)
-            pdf.set_text_color(*_TINTA)
-            pdf.cell(0, 4.8, T(s.get("titulo", "")), new_x="LMARGIN", new_y="NEXT")
-            sub = " · ".join(
-                str(x) for x in [s.get("institucion"), s.get("ubicacion"), s.get("anio_egreso")] if x
-            )
-            if sub:
-                pdf.set_font(FONT, "", 9)
-                pdf.set_text_color(*_GRIS)
-                pdf.cell(0, 4.4, T(sub), new_x="LMARGIN", new_y="NEXT")
-            pdf.ln(1)
-
-    # ── Habilidades (habilidades + herramientas, sin duplicados) ──
-    skills, vistos = [], set()
-    for s in [*(cv.get("habilidades") or []), *(cv.get("herramientas") or [])]:
-        s = str(s).strip()
-        if s and s.lower() not in vistos:
-            vistos.add(s.lower())
-            skills.append(s)
-    if skills:
-        seccion("Habilidades")
-        pdf.set_font(FONT, "", 9.5)
-        pdf.set_text_color(*_GRIS)
-        pdf.multi_cell(usable, 4.6, T(", ".join(skills)), new_x="LMARGIN", new_y="NEXT")
-
-    # ── Idiomas ──
-    idiomas = cv.get("idiomas") or []
-    if idiomas:
-        seccion("Idiomas")
-        pdf.set_font(FONT, "", 9.5)
-        pdf.set_text_color(*_GRIS)
-        linea = "    ".join(
-            f"{i.get('idioma', '')} ({i.get('nivel', '')})".strip(" ()") for i in idiomas
-        )
-        pdf.multi_cell(usable, 4.6, T(linea), new_x="LMARGIN", new_y="NEXT")
-
-    out = pdf.output()
-    return bytes(out)
 
 
 @app.post("/generar_cv_pdf")
 def generar_cv_pdf(req: GenerarCVRequest):
     """Devuelve el CV como PDF nativo. El front manda el cvActual ya optimizado;
     aqui solo se renderiza (no se vuelve a llamar a la IA)."""
-    base = req.perfil if isinstance(req.perfil, dict) and req.perfil else PERFIL
+    base = req.perfil if isinstance(req.perfil, dict) and req.perfil else perfil_store.get_perfil()
     cv = json.loads(json.dumps(base))
     cv["experiencia"] = ordenar_experiencia_reciente(cv.get("experiencia", []))
     try:
@@ -1281,35 +342,29 @@ def analizar(req: AnalizarRequest):
 
 @app.get("/historial_keywords")
 def historial_keywords():
-    historial = cargar_historial()
+    historial = perfil_store.cargar_historial()
     return {
         "ok": True,
         "total": len(historial),
-        "max": HISTORIAL_MAX,
+        "max": perfil_store.HISTORIAL_MAX,
         "entradas": list(reversed(historial)),  # mas reciente primero
-        "top_faltantes": top_keywords_faltantes(historial),
+        "top_faltantes": perfil_store.top_keywords_faltantes(historial),
     }
 
 
 @app.post("/limpiar_historial")
 def limpiar_historial():
     try:
-        if HISTORIAL_PATH.exists():
-            HISTORIAL_PATH.unlink()
+        if perfil_store.HISTORIAL_PATH.exists():
+            perfil_store.HISTORIAL_PATH.unlink()
     except Exception as e:
-        log.warning(f"No pude borrar {HISTORIAL_PATH.name}: {e}")
+        log.warning(f"No pude borrar {perfil_store.HISTORIAL_PATH.name}: {e}")
     return {"ok": True}
 
 
 @app.post("/limpiar_contexto")
 def limpiar_contexto():
-    global _CONTEXTO
-    _CONTEXTO = None
-    try:
-        if CONTEXTO_PATH.exists():
-            CONTEXTO_PATH.unlink()
-    except Exception as e:
-        log.warning(f"No pude borrar {CONTEXTO_PATH.name}: {e}")
+    perfil_store.set_contexto(None)
     return {"ok": True}
 
 
@@ -1361,24 +416,24 @@ if __name__ == "__main__":
     import uvicorn
 
     estado_inicial = IA.estado()
+    ctx_inicial = perfil_store.get_contexto()
 
     print("=" * 70)
-    print("  IZIPEGA — SERVIDOR LOCAL (Gemini + Groq)")
+    print("  IZIPEGA — SERVIDOR LOCAL (DeepSeek)")
     print("=" * 70)
     print()
     print(f"  Log:    {LOG_FILE}")
-    print(f"  Perfil: {PERFIL_PATH.name}")
+    print(f"  Perfil: {perfil_store.PERFIL_PATH.name}")
     print(
         "  IA:     "
-        f"Gemini={'OK' if estado_inicial['gemini_activo'] else 'no configurada'}, "
-        f"Groq={'OK' if estado_inicial['groq_activo'] else 'no configurada'}"
+        f"DeepSeek={'OK' if estado_inicial['deepseek_activo'] else 'no configurada'}"
     )
     if not estado_inicial["alguno_disponible"]:
-        print("          (configura tus keys desde la extension al abrirla)")
-    if _CONTEXTO:
+        print("          (configura tu key desde la extension al abrirla)")
+    if ctx_inicial:
         print(
-            f"  Contexto previo: {_CONTEXTO.get('cargo_objetivo', '?')} "
-            f"@ {_CONTEXTO.get('empresa', '?')}"
+            f"  Contexto previo: {ctx_inicial.get('cargo_objetivo', '?')} "
+            f"@ {ctx_inicial.get('empresa', '?')}"
         )
     else:
         print("  Contexto previo: (ninguno)")
@@ -1399,7 +454,7 @@ if __name__ == "__main__":
     print("  Para usar la extension:")
     print("    1) chrome://extensions  ->  activa 'Modo desarrollador'")
     print("    2) 'Cargar descomprimida' -> elige carpeta extension/")
-    print("    3) Abre el panel lateral: pegara tus keys de Gemini y Groq")
+    print("    3) Abre el panel lateral: pega tu key de DeepSeek")
     print("       la primera vez. Luego funciona en cualquier formulario.")
     print()
     print("  Ctrl+C para detener.")

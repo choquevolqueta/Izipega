@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Izipega",
   "version": "1.0.0",
-  "description": "Rellena cualquier formulario web usando tu perfil + IA (Gemini + Groq).",
+  "description": "Rellena cualquier formulario web usando tu perfil + IA (DeepSeek).",
   "permissions": ["activeTab", "scripting", "storage", "sidePanel"],
   "host_permissions": [
     "<all_urls>",
@@ -32,7 +32,7 @@
     },
     "forzar_rellenado": {
       "suggested_key": {
-        "default": "Alt+G"
+        "default": "Alt+Q"
       },
       "description": "Re-llenar formulario (forzar)"
     }

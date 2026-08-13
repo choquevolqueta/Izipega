@@ -1,28 +1,19 @@
 """
 ia_client.py
-------------
-Cliente unificado con cascada Gemini -> Groq.
+-----------
+Cliente dual: DeepSeek para texto + Gemini para vision.
 
-- Gemini (Gemini 2.5 Flash) primario: respuestas creativas y largas, vision.
-- Groq (Llama 3.3 70B) secundario: rapido y barato; entra si Gemini falla
-  o esta rate-limited.
-
-Las API keys se cargan desde el .env del servidor. El usuario las configura
-desde la extension (POST /configurar_keys reescribe el .env y luego llama a
-reload_clients()). Sin keys, IAClient devuelve el fallback de cada llamada.
-
-Reglas:
-- Cooldowns automaticos parseando "try again in Xh Ym Zs" de los errores.
-- TPD (Groq tokens per day) marca Groq sin cuota toda la sesion.
-- Cualquier rate limit / 429 / quota dispara cooldown corto y se baja al
-  siguiente proveedor.
+- DeepSeek (deepseek-v4-flash) via API compatible OpenAI para chat/analisis.
+- Gemini via google-genai SDK exclusivamente para vision.
+- Las API keys se cargan desde el .env del servidor.
+- Sin keys, IAClient devuelve el fallback de cada llamada.
 """
 
 from __future__ import annotations
 
+import base64
 import logging
 import os
-import re
 import time
 from pathlib import Path
 from typing import Optional
@@ -33,189 +24,129 @@ load_dotenv(override=True)
 
 log = logging.getLogger("ia")
 
-GROQ_MODEL = "llama-3.3-70b-versatile"
+DEEPSEEK_MODEL = "deepseek-v4-flash"
+DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 GEMINI_MODEL = "gemini-2.5-flash"
 
 
-def _leer_keys_env() -> tuple[str, str]:
-    """Re-lee las keys del proceso (despues de recargar el .env)."""
-    return (
-        os.getenv("GEMINI_API_KEY", "").strip(),
-        os.getenv("GROQ_API_KEY", "").strip(),
-    )
+def _leer_key_env(clave: str = "DEEPSEEK_API_KEY") -> str:
+    return os.getenv(clave, "").strip()
 
 
 class IAClient:
-    """Cliente unificado: Gemini -> Groq con fallback automatico."""
+    """Cliente dual: DeepSeek para texto, Gemini para vision."""
 
     def __init__(self):
-        # Gemini
-        self._gemini = None
-        self._gemini_sin_cuota = False
-        self._gemini_cooldown_until = 0.0
-
-        # Groq
-        self._groq = None
-        self._groq_sin_cuota = False
-        self._groq_cooldown_until = 0.0
-
-        self._init_clientes()
+        self._client = None
+        self._sin_cuota = False
+        self._cooldown_until = 0.0
+        self._gemini_client = None
+        self._init_cliente()
 
     # ── INIT ───────────────────────────────────────────────────────
-    def _init_clientes(self) -> None:
-        gemini_key, groq_key = _leer_keys_env()
-        self._init_gemini(gemini_key)
-        self._init_groq(groq_key)
+    def _init_cliente(self) -> None:
+        dk = _leer_key_env("DEEPSEEK_API_KEY")
+        gk = _leer_key_env("GEMINI_API_KEY")
+        self._init_deepseek(dk)
+        self._init_gemini(gk)
+        if not self._client and not self._gemini_client:
+            log.warning("  [IA] Sin cliente activo. Configura API keys desde la extension.")
 
-        if not self._gemini and not self._groq:
-            log.warning(
-                "  [IA] Sin clientes activos. Configura tus API keys desde la extension."
-            )
+    def _init_deepseek(self, key: str) -> None:
+        self._client = None
+        if not key:
+            return
+        try:
+            from openai import OpenAI
+
+            self._client = OpenAI(api_key=key, base_url=DEEPSEEK_BASE_URL)
+            log.info(f"  [IA] DeepSeek inicializado ({DEEPSEEK_MODEL}).")
+        except Exception as e:
+            log.warning(f"  [IA] No se pudo inicializar DeepSeek: {e}")
 
     def _init_gemini(self, key: str) -> None:
-        self._gemini = None
+        self._gemini_client = None
         if not key:
             return
         try:
             from google import genai
 
-            self._gemini = genai.Client(api_key=key)
-            log.info(f"  [IA] Gemini inicializado ({GEMINI_MODEL}).")
+            self._gemini_client = genai.Client(api_key=key)
+            log.info(f"  [IA] Gemini inicializado ({GEMINI_MODEL}) solo para vision.")
         except Exception as e:
             log.warning(f"  [IA] No se pudo inicializar Gemini: {e}")
 
-    def _init_groq(self, key: str) -> None:
-        self._groq = None
-        if not key:
-            return
-        try:
-            from groq import Groq
-
-            self._groq = Groq(api_key=key)
-            log.info(f"  [IA] Groq inicializado ({GROQ_MODEL}).")
-        except Exception as e:
-            log.warning(f"  [IA] No se pudo inicializar Groq: {e}")
-
     def reload(self) -> dict:
-        """Re-lee el .env y reinicializa ambos clientes. Devuelve estado."""
+        """Re-lee el .env y reinicializa los clientes. Devuelve estado."""
         load_dotenv(override=True)
-        # Reset de estados al recargar (nuevas keys = nueva cuota presunta)
-        self._gemini_sin_cuota = False
-        self._gemini_cooldown_until = 0.0
-        self._groq_sin_cuota = False
-        self._groq_cooldown_until = 0.0
-        self._init_clientes()
+        self._sin_cuota = False
+        self._cooldown_until = 0.0
+        self._init_cliente()
         return self.estado()
 
     def estado(self) -> dict:
-        gk, qk = _leer_keys_env()
+        dk = _leer_key_env("DEEPSEEK_API_KEY")
+        gk = _leer_key_env("GEMINI_API_KEY")
         return {
+            "deepseek_configurado": bool(dk),
+            "deepseek_activo": self._client is not None,
             "gemini_configurado": bool(gk),
-            "groq_configurado": bool(qk),
-            "gemini_activo": self._gemini is not None,
-            "groq_activo": self._groq is not None,
-            "alguno_disponible": self._gemini_disponible() or self._groq_disponible(),
+            "gemini_activo": self._gemini_client is not None,
+            "alguno_disponible": self._disponible() or self._gemini_disponible(),
         }
 
     # ── ESTADO ─────────────────────────────────────────────────────
+    def _disponible(self) -> bool:
+        if not self._client:
+            return False
+        if self._sin_cuota:
+            return False
+        if time.time() < self._cooldown_until:
+            return False
+        return True
+
     def _gemini_disponible(self) -> bool:
-        if not self._gemini:
-            return False
-        if self._gemini_sin_cuota:
-            return False
-        if time.time() < self._gemini_cooldown_until:
-            return False
-        return True
+        return self._gemini_client is not None
 
-    def _groq_disponible(self) -> bool:
-        if not self._groq:
-            return False
-        if self._groq_sin_cuota:
-            return False
-        if time.time() < self._groq_cooldown_until:
-            return False
-        return True
-
-    @staticmethod
-    def _parse_retry_seconds(error_msg: str) -> float:
-        m = re.search(
-            r"try again in\s+(?:(\d+)h)?(?:(\d+)m)?(?:([\d.]+)s)?",
-            error_msg,
-            re.IGNORECASE,
-        )
-        if m and any(m.groups()):
-            h = int(m.group(1) or 0)
-            mn = int(m.group(2) or 0)
-            s = float(m.group(3) or 0)
-            total = h * 3600 + mn * 60 + s
-            if total > 0:
-                return total
-        return 60.0
-
-    def _marcar_gemini_error(self, e: Exception) -> None:
+    def _marcar_error(self, e: Exception, es_vision: bool = False) -> None:
         msg = str(e)
         msg_low = msg.lower()
-        if "quota" in msg_low or "resource exhausted" in msg_low or "429" in msg:
-            cooldown = self._parse_retry_seconds(msg)
-            self._gemini_cooldown_until = time.time() + cooldown
-            log.warning(f"  [IA] Gemini rate-limited / sin cuota, cooldown {cooldown:.0f}s.")
+        if "rate" in msg_low or "429" in msg or "too many requests" in msg_low:
+            self._cooldown_until = time.time() + 60
+            log.warning(f"  [IA] DeepSeek rate-limited, cooldown 60s.")
             return
-        if "api key" in msg_low or "permission" in msg_low or "unauthenticated" in msg_low:
-            self._gemini = None
-            log.warning("  [IA] Gemini key invalida. Cliente desactivado.")
+        if "insufficient_quota" in msg_low or "quota" in msg_low or "exceeded" in msg_low:
+            self._sin_cuota = True
+            log.warning("  [IA] DeepSeek sin cuota. Pausado hasta reset de cuenta.")
             return
-        log.warning(f"  [IA] Gemini error: {msg[:140]}")
-
-    def _marcar_groq_error(self, e: Exception) -> None:
-        msg = str(e)
-        msg_low = msg.lower()
-        if "tokens per day" in msg_low or "tpd" in msg_low:
-            self._groq_sin_cuota = True
-            log.warning("  [IA] Groq sin cuota diaria (TPD). Pausado hasta reset.")
+        if es_vision:
+            log.warning(f"  [IA] DeepSeek vision fallo (no soportado): {msg[:100]}")
             return
-        if "rate_limit" in msg_low or "rate limit" in msg_low or "429" in msg:
-            cooldown = self._parse_retry_seconds(msg)
-            self._groq_cooldown_until = time.time() + cooldown
-            log.warning(f"  [IA] Groq rate-limited, cooldown {cooldown:.0f}s.")
+        if "api key" in msg_low or "invalid" in msg_low or "unauthorized" in msg_low or "authentication" in msg_low:
+            self._client = None
+            log.warning("  [IA] DeepSeek key invalida. Cliente desactivado.")
             return
-        if "api key" in msg_low or "invalid_api_key" in msg_low or "unauthorized" in msg_low:
-            self._groq = None
-            log.warning("  [IA] Groq key invalida. Cliente desactivado.")
-            return
-        log.warning(f"  [IA] Groq error: {msg[:140]}")
+        log.warning(f"  [IA] DeepSeek error: {msg[:140]}")
 
     # ── TEXTO ──────────────────────────────────────────────────────
-    def chat(self, prompt: str, fallback: str = "", max_tokens: int = 300) -> str:
-        """
-        Manda un prompt y devuelve la respuesta. Cascada Gemini -> Groq.
-        `max_tokens` solo aplica a Groq (Gemini se controla via prompt).
-        """
-        # 1. Gemini primario
-        if self._gemini_disponible():
+    def chat(self, prompt: str, fallback: str = "", max_tokens: int = 300, pensar: bool = False) -> str:
+        """pensar=True habilita el "thinking" extendido de DeepSeek. Por
+        defecto va apagado (respuestas rapidas para el relleno de formularios
+        en vivo); activalo en llamadas puntuales y mas importantes donde vale
+        la pena que el modelo razone antes de responder (ej. componer el CV)."""
+        if self._disponible():
             try:
-                resp = self._gemini.models.generate_content(
-                    model=GEMINI_MODEL,
-                    contents=prompt,
-                )
-                out = (resp.text or "").strip()
-                if out:
-                    return out
-            except Exception as e:
-                self._marcar_gemini_error(e)
-
-        # 2. Groq secundario
-        if self._groq_disponible():
-            try:
-                resp = self._groq.chat.completions.create(
-                    model=GROQ_MODEL,
+                resp = self._client.chat.completions.create(
+                    model=DEEPSEEK_MODEL,
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=max_tokens,
+                    extra_body={"thinking": {"type": "enabled" if pensar else "disabled"}},
                 )
                 out = (resp.choices[0].message.content or "").strip()
                 if out:
                     return out
             except Exception as e:
-                self._marcar_groq_error(e)
+                self._marcar_error(e)
 
         log.warning(f"  [IA] Sin IA disponible, usando fallback: '{fallback[:40]}'")
         return fallback
@@ -243,9 +174,19 @@ class IAClient:
                 return opt
         return opciones[0]
 
-    # ── VISION (siempre Gemini) ────────────────────────────────────
+    # ── VISION (Gemini) ────────────────────────────────────────────
     def vision_disponible(self) -> bool:
-        return bool(self._gemini)
+        return self._gemini_disponible()
+
+    def _gemini_vision(self, prompt: str, imagen_bytes: bytes) -> str:
+        import PIL.Image
+        import io
+        img = PIL.Image.open(io.BytesIO(imagen_bytes))
+        resp = self._gemini_client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=[prompt, img],
+        )
+        return (resp.text or "").strip()
 
     def vision(
         self,
@@ -254,22 +195,16 @@ class IAClient:
         fallback: str = "",
     ) -> str:
         if not self._gemini_disponible():
-            log.warning("  [IA] Vision pedida pero Gemini no esta disponible.")
+            log.warning("  [IA] Vision no disponible (Gemini no configurado). Usando fallback.")
             return fallback
         try:
-            from google.genai import types
-
-            img_bytes = imagen.read_bytes() if isinstance(imagen, Path) else imagen
-            resp = self._gemini.models.generate_content(
-                model=GEMINI_MODEL,
-                contents=[
-                    types.Part.from_bytes(data=img_bytes, mime_type="image/png"),
-                    prompt,
-                ],
-            )
-            return (resp.text or "").strip()
+            if isinstance(imagen, Path):
+                imagen_bytes = imagen.read_bytes()
+            else:
+                imagen_bytes = imagen
+            return self._gemini_vision(prompt, imagen_bytes)
         except Exception as e:
-            self._marcar_gemini_error(e)
+            log.warning(f"  [IA] Gemini vision fallo: {e}")
             return fallback
 
 
@@ -285,5 +220,5 @@ def get_ia() -> IAClient:
 
 
 def reload_ia() -> dict:
-    """Para uso del endpoint /configurar_keys: relee .env y rearma clientes."""
+    """Para uso del endpoint /configurar_keys: relee .env y rearma cliente."""
     return get_ia().reload()

@@ -8,6 +8,7 @@ perfil.json
 perfil_propuesto.json
 perfil_backups/
 contexto_actual.json
+historial_keywords.json
 
 # Python
 __pycache__/

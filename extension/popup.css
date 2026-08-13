@@ -659,6 +659,15 @@ button.link:hover {
   background: rgba(244, 201, 122, 0.1);
 }
 
+#btn-reset-historial.hidden {
+  display: none;
+}
+
+#btn-reset-historial {
+  margin-top: 4px;
+  align-self: flex-start;
+}
+
 .ayuda {
   padding: 0 14px 8px;
   font-size: 11px;

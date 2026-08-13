@@ -25,18 +25,18 @@
         <button id="btn-cerrar-config" class="icono icono-cerrar" title="Cerrar">✕</button>
       </div>
       <p class="config-keys-ayuda">
-        Necesitas al menos una key. Ambas son gratis y se guardan solo en tu PC.
+        DeepSeek para texto, Gemini (opcional) para vision. Se guardan solo en tu PC.
       </p>
       <label class="config-keys-label">
-        <span>Gemini (primaria)</span>
+        <span>DeepSeek API key</span>
+        <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener">obtener</a>
+      </label>
+      <input id="input-deepseek-key" type="password" placeholder="sk-..." autocomplete="off" />
+      <label class="config-keys-label" style="margin-top:8px">
+        <span>Gemini API key <small>(vision)</small></span>
         <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">obtener</a>
       </label>
-      <input id="input-gemini-key" type="password" placeholder="AIzaSy..." autocomplete="off" />
-      <label class="config-keys-label">
-        <span>Groq (respaldo)</span>
-        <a href="https://console.groq.com/keys" target="_blank" rel="noopener">obtener</a>
-      </label>
-      <input id="input-groq-key" type="password" placeholder="gsk_..." autocomplete="off" />
+      <input id="input-gemini-key" type="password" placeholder="AIza..." autocomplete="off" />
       <div class="config-keys-estado" id="config-keys-estado"></div>
       <button id="btn-guardar-keys" class="primary">Guardar y conectar</button>
     </section>
@@ -101,6 +101,7 @@
         <span class="btn-cv-texto">Crear CV optimizado</span>
       </button>
       <div id="cv-hint" class="cv-hint">Analiza ofertas para activar esta opción.</div>
+      <button id="btn-reset-historial" class="link hidden" title="Borra los analisis acumulados (usalo si vas a apuntar a otra orientacion de CV)">Reiniciar acumulador de análisis</button>
       <div id="drop-zone" class="drop-zone">
         <div class="drop-zone-icono">⇩</div>
         <div class="drop-zone-txt">Arrastra un PDF aqui</div>

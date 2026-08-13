@@ -1,7 +1,9 @@
 
 # Izipega
 
-Extensión de Chrome + servidor local que te ayuda a buscar pega(trabajo) usa la IA para saber si te conviene postular a una oferta, y  rellena cualquier formulario web usando tu perfil y un par de modelos de IA gratuitos (Gemini como primario, Groq como respaldo) para mejorar tus posibilidades de pasar los filtros ATS.
+[![Tests](https://github.com/choquevolqueta/Izipega/actions/workflows/tests.yml/badge.svg)](https://github.com/choquevolqueta/Izipega/actions/workflows/tests.yml)
+
+Extensión de Chrome + servidor local que te ayuda a buscar pega(trabajo) usa la IA para saber si te conviene postular a una oferta, y  rellena cualquier formulario web usando tu perfil y DeepSeek (API compatible con OpenAI) para mejorar tus posibilidades de pasar los filtros ATS.
 
 > ⚠️ **Versión demo / beta en evaluación.** Funciona, pero esperá bugs. Reportá lo que encuentres como issue.
 
@@ -11,9 +13,8 @@ Extensión de Chrome + servidor local que te ayuda a buscar pega(trabajo) usa la
 
 - **Chrome** (o navegador basado en Chromium)
 - **Python 3.10+** ([cómo instalarlo](#instalar-python-3-minutos))
-- Una API key gratis de al menos uno (te las pide la extensión al abrirla la primera vez):
-  - **Gemini** (recomendado, más generoso): https://aistudio.google.com/apikey
-  - **Groq** (respaldo): https://console.groq.com/keys
+- Una API key de DeepSeek (te la pide la extensión al abrirla la primera vez):
+  - https://platform.deepseek.com/api_keys
 
 ---
 
@@ -62,7 +63,7 @@ Si ya tenés Python instalado, saltá esto.
 | Abrir / cerrar panel lateral | `Alt+Shift+E` |
 | Analizar contexto | `Alt+A` |
 | Rellenar formulario | `Alt+R` |
-| Re-llenar (forzar) | `Alt+G` |
+| Re-llenar (forzar) | `Alt+Q` |
 
 Editables en `chrome://extensions/shortcuts`.
 
@@ -80,11 +81,18 @@ Click en el icono ⚙ del panel lateral. Podés cambiar una o ambas keys cuando 
 
 ```
 izipega/
-├── server.py              FastAPI en localhost:8765
-├── ia_client.py           Cascada Gemini → Groq
+├── server.py              Rutas de FastAPI en localhost:8765 (delgado, orquesta lo de abajo)
+├── models.py              Modelos Pydantic de request/response
+├── perfil_store.py        Estado + persistencia: perfil, contexto, historial, backups, .env
+├── ia_logic.py            Prompts y llamadas a la IA (respuestas directas, relleno, analisis)
+├── cv_export.py           Orden cronologico, viñetas y render del CV a PDF
+├── ia_client.py           DeepSeek via openai library
 ├── perfil.json.template   Plantilla del schema de perfil (se commitea)
 ├── perfil.json            Tu perfil personal (gitignored, se crea solo)
 ├── requirements.txt
+├── requirements-dev.txt   Deps solo para tests (pytest, httpx)
+├── tests/                 Suite de pytest (logica pura, sin IA)
+├── .github/workflows/     CI: corre los tests en cada push/PR
 ├── lanzar_servidor.bat
 ├── LICENSE                MIT
 ├── .env                   Tus API keys (gitignored, se crea solo)
@@ -97,7 +105,7 @@ izipega/
 - **Todo corre en tu máquina.** El servidor escucha solo en `127.0.0.1:8765`.
 - **Las API keys** se guardan en `.env` local (gitignored).
 - **Tu perfil** queda en `perfil.json` local (gitignored).
-- **Los únicos datos que salen de tu PC** son los prompts que mandás a Gemini o Groq cuando se activan. No se mandan a ningún otro servicio.
+- **Los únicos datos que salen de tu PC** son los prompts que mandás a DeepSeek cuando se activan. No se mandan a ningún otro servicio.
 
 ## Solución de problemas
 
@@ -114,6 +122,18 @@ izipega/
 - No funciona si la pestaña está minimizada o no es la activa (Chrome no captura).
 - Sitios con anti-bot agresivo (Cloudflare Turnstile, etc.) pueden bloquear los clicks sintéticos al aplicar las respuestas.
 - PDF escaneados no se procesan (necesitarían OCR, no implementado).
+
+## Tests
+
+Cubren la lógica de negocio pura (matching de respuestas directas, orden cronológico de experiencia, historial de keywords, armado del resumen de perfil) sin depender de la IA — corren sin API keys.
+
+```bash
+pip install -r requirements-dev.txt
+cp perfil.json.template perfil.json   # si no existe todavía
+pytest -v
+```
+
+Corren automáticamente en cada push/PR vía GitHub Actions (`.github/workflows/tests.yml`).
 
 ## Contribuir
 
